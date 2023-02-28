@@ -5,7 +5,7 @@ from collections import namedtuple
 
 PeakData = namedtuple(
     "PeakData",
-    "res hsqc contact_edges noe_edges virtual_edges edge_index eig_vecs eig_vals num_nodes",
+    "res hsqc contact_edges noe_edges virtual_edges edge_index eig_vecs eig_vals num_nodes y",
 )
 
 
@@ -36,6 +36,10 @@ class PeakMatchAugmentedDataset(torch.utils.data.IterableDataset):
 
         eig_vecs, eig_vals = get_laplacian(edge_index, num_nodes)
 
+        # This will need to be changed when we allow for num_residues != num_fake_hsqc
+        assert self.num_residues == num_fake_hsqc
+        y = torch.eye(self.num_residues).flatten()
+
         return PeakData(
             res=residues,
             hsqc=fake_hsqc,
@@ -46,6 +50,7 @@ class PeakMatchAugmentedDataset(torch.utils.data.IterableDataset):
             eig_vecs=eig_vecs,
             eig_vals=eig_vals,
             num_nodes=num_nodes,
+            y=y,
         )
 
 

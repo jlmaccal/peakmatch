@@ -70,8 +70,11 @@ class InitalEmbed(nn.Module):
         n_hsqc = []
         vecs = []
         batch_indices = []
+        ys = []
 
         for i, data in enumerate(batch):
+            ys.append(data.y)
+
             res_x = self.embed_res(data.res)
             res_x = torch.cat([res_x, self.res_tag.expand(res_x.size(0), -1)], dim=1)
 
@@ -128,8 +131,10 @@ class InitalEmbed(nn.Module):
         node_embeddings = unbatch(node_embeddings, batch_indices)
         batch_data = []
         for i, x in enumerate(node_embeddings):
-            data = Data(x=x, edge_index=raw_edge_index[i], edge_attr=edge_embeddings[i])
+            data = Data(
+                x=x, edge_index=raw_edge_index[i], edge_attr=edge_embeddings[i], y=ys[i]
+            )
             data.n_res = n_res[i]
             data.n_hsqc = n_hsqc[i]
             batch_data.append(data)
-        return Batch.from_data_list(batch_data)
+        return Batch.from_data_list(batch_data, follow_batch=["y"])
