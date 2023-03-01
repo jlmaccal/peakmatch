@@ -4,8 +4,11 @@ from peakmatch import data
 from peakmatch.layers import initembed, readout
 from peakmatch.model import PeakMatchModel
 
-x = torch.randn(5, 3).float()
-e = torch.tensor([[0, 1, 2, 3], [1, 2, 3, 4]], dtype=torch.long)
+N = 4
+x = torch.randn(N, 3).float()
+e1 = list(range(0, N - 1))
+e2 = list(range(1, N))
+e = torch.tensor([e1, e2], dtype=torch.long)
 
 dataset = data.PeakMatchAugmentedDataset(x, e)
 loader = data.PeakMatchDataLoader(dataset, batch_size=32)

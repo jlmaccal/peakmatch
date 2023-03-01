@@ -1,19 +1,22 @@
 from torch import optim
-from torch.nn.functional import cross_entropy
+from torch.nn.functional import cross_entropy, softmax
 import pytorch_lightning as pl
-from .layers.initembed import InitalEmbed
+from .layers.initembed import InitalEmbedLayer
 from .layers.readout import ReadoutLayer
+from .layers.gps import GPSLayer
 
 
 class PeakMatchModel(pl.LightningModule):
     def __init__(self):
         super().__init__()
 
-        self.init_embed = InitalEmbed()
+        self.init_embed = InitalEmbedLayer()
+        self.gps = GPSLayer(dim_h=128, num_heads=4)
         self.readout = ReadoutLayer()
 
     def forward(self, batch):
         batch = self.init_embed(batch)
+        batch = self.gps(batch)
         output = self.readout(batch)
         return output
 

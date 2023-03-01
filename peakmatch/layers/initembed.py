@@ -5,7 +5,7 @@ from torch_geometric.data import Data, Batch
 import torch
 
 
-class InitalEmbed(nn.Module):
+class InitalEmbedLayer(nn.Module):
     def __init__(
         self,
         res_dim=3,
