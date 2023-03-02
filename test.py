@@ -10,7 +10,7 @@ e1 = list(range(0, N - 1))
 e2 = list(range(1, N))
 e = torch.tensor([e1, e2], dtype=torch.long)
 
-dataset = data.PeakMatchAugmentedDataset(x, e)
+dataset = data.PeakMatchAugmentedDataset(x, e, N - 1) # n_hsqc_peaks is third argument
 loader = data.PeakMatchDataLoader(dataset, batch_size=32)
 
 model = PeakMatchModel()
