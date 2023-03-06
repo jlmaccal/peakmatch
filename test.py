@@ -4,15 +4,15 @@ from peakmatch import data
 from peakmatch.layers import initembed, readout
 from peakmatch.model import PeakMatchModel
 
-N = 4
+N = 40
 x = torch.randn(N, 3).float()
 e1 = list(range(0, N - 1))
 e2 = list(range(1, N))
 e = torch.tensor([e1, e2], dtype=torch.long)
 
-dataset = data.PeakMatchAugmentedDataset(x, e, N - 1) # n_hsqc_peaks is third argument
+dataset = data.PeakMatchAugmentedDataset(x, e, 0.05, 0.05) 
 loader = data.PeakMatchDataLoader(dataset, batch_size=32)
 
 model = PeakMatchModel()
-trainer = pl.Trainer(limit_train_batches=100)
+trainer = pl.Trainer(limit_train_batches=100, accelerator='gpu', devices=1)
 trainer.fit(model=model, train_dataloaders=loader)

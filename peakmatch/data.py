@@ -2,6 +2,7 @@ import torch
 from .laplacian import get_laplacian
 from torch_geometric.utils import to_undirected
 from collections import namedtuple
+import numpy as np
 
 PeakData = namedtuple(
     "PeakData",
@@ -10,12 +11,13 @@ PeakData = namedtuple(
 
 
 class PeakMatchAugmentedDataset(torch.utils.data.IterableDataset):
-    def __init__(self, residues, predicted_contacts, num_fake_hsqc):
+    def __init__(self, residues, predicted_contacts, missing_peak_frac = 0.10, extra_peak_frac = 0.10 ):
         self.residues = residues
         self.num_residues = self.residues.size(0)
         self.predicted_contacts = to_undirected(predicted_contacts, self.num_residues)
         self.num_predicted_contacts = self.predicted_contacts.size(1)
-        self.num_fake_hsqc = num_fake_hsqc
+        self.missing_peak_frac = missing_peak_frac
+        self.extra_peak_frac = extra_peak_frac 
         self.dummy_res_node = 0
                
     def __iter__(self):
@@ -26,30 +28,31 @@ class PeakMatchAugmentedDataset(torch.utils.data.IterableDataset):
         residues = self.residues.clone()
         contacts = self.predicted_contacts.clone()
 
+        # Sample extra and missing peaks
         fake_hsqc = torch.normal(mean=residues, std=0.2)
+        n_extra_peaks = np.round(self.num_residues * self.extra_peak_frac).astype(int)
+        n_missing_peaks = np.round(self.num_residues * self.missing_peak_frac).astype(int)
 
-        if self.num_residues != self.num_fake_hsqc: 
-            residues, fake_hsqc = self._handle_peak_mismatch_hsqc(residues, fake_hsqc)
-        #num_fake_hsqc = fake_hsqc.size(0)
+        y = torch.eye(self.num_residues)
 
+        # handle effects of additional and missing peaks
+        if n_extra_peaks > 0:
+            residues, fake_hsqc, y = self._handle_extra_hsqc_peaks(residues, n_extra_peaks, fake_hsqc, y)
+        if n_missing_peaks > 0:
+            fake_hsqc, y = self._handle_missing_hsqc_peaks(n_missing_peaks, fake_hsqc, y)
+
+        y = y.flatten()
+
+        # handle edges
         noe_edges = _gen_fake_noe(fake_hsqc, contacts, self.num_residues)
 
-        virtual_edges = _gen_virtual_edges(self.num_residues + self.num_fake_hsqc)
+        virtual_edges = _gen_virtual_edges(self.num_residues + self.dummy_res_node + fake_hsqc.size(0))
 
         edge_index = torch.cat([contacts, noe_edges, virtual_edges], dim=1)
 
-        num_nodes = self.num_residues + self.num_fake_hsqc + 1 + self.dummy_res_node
+        num_nodes = self.num_residues + self.dummy_res_node + 1 + fake_hsqc.size(0)
 
         eig_vecs, eig_vals = get_laplacian(edge_index, num_nodes)
-
-        # This will need to be changed when we allow for num_residues != num_fake_hsqc
-        #assert self.num_residues == num_fake_hsqc
-
-        if self.num_residues == self.num_fake_hsqc: 
-            y = torch.eye(self.num_residues).flatten()
-        
-        else:
-            y = self._handle_peak_mismatch_y()
 
         return PeakData(
             res=residues,
@@ -64,47 +67,61 @@ class PeakMatchAugmentedDataset(torch.utils.data.IterableDataset):
             y=y,
         )
     
-    def _handle_peak_mismatch_hsqc(self, residues, fake_hsqc):
-        if self.num_residues < self.num_fake_hsqc:
-            # If we have more peaks than residues we need to generate additional fake hsqc peaks
+    def _handle_extra_hsqc_peaks(self, residues, n_extra_peaks, fake_hsqc, y):
 
-            # Get indices of initial fake_hsqc size (identical to residue size)
-            indices = torch.arange(0, fake_hsqc.size(0)).float()
+        # Get indices of residues size
+        indices = torch.arange(0, self.num_residues).float()
 
-            # Sample over those indices with replacement for n_peaks - n_res with replacement
-            idx = indices.multinomial(self.num_fake_hsqc - self.num_residues, replacement=True)
+        # Sample over those indices with replacement for n_extra_peaks
+        idx = indices.multinomial(n_extra_peaks, replacement=True)
 
-            # Add noise to samples to simulate new peaks without a residue explanation
-            samples = torch.normal(mean=fake_hsqc[idx], std=0.2) 
+        # Add noise to samples to simulate new peaks without an associated residue 
+        # we could use residues or fake_hsqc here, using fake_hsqc makes extra peaks noisier.
+        samples = torch.normal(mean=fake_hsqc[idx], std=0.2) 
 
-            # Combine old fake_hsqc with new samples
-            combined_fake_hsqc = torch.cat([fake_hsqc, samples])
+        # Combine old fake_hsqc with new samples
+        combined_fake_hsqc = torch.cat([fake_hsqc, samples])
 
-            # Add a dummy residue node with zeros for calculated hsqc data and add to residue array
-            self.dummy_res_node = 1
-            residues = torch.cat([residues, torch.zeros((1, 3))])
-            return residues, combined_fake_hsqc
-        
-        if self.num_residues > self.num_fake_hsqc:
-            return residues, fake_hsqc[:self.num_fake_hsqc]
-    
+        # Add a dummy residue node with zeros for calculated hsqc data and add to residue array
+        self.dummy_res_node = 1
+        residues = torch.cat([residues, torch.zeros((1, 3))])
 
-    def _handle_peak_mismatch_y(self):
-        # If we have more residues than hsqc peaks, that means that some residues do not match with an hsqc peak
-        if self.num_residues > self.num_fake_hsqc:
-                y = torch.eye(self.num_residues)
-                y = y[:, :self.num_fake_hsqc] 
-                y = y.flatten()
-                return y
-        
-        # If we have fewer residues than hsqc peaks, we set values of 1 between every unexplainable hsqc peak and our dummy residue node
-        elif self.num_residues < self.num_fake_hsqc:
-                y = torch.zeros(self.num_residues + self.dummy_res_node, self.num_fake_hsqc)
-                res_range = torch.arange(0, self.num_residues)
-                y[res_range, res_range] = 1
-                y[-1, self.num_residues:] = 1
-                y = y.flatten()
-                return y
+        ## y also has to change to reflect extra peaks added ##
+
+        # Add additional hsqc columns to y
+        y = torch.hstack((y, torch.zeros(y.size(0), n_extra_peaks)))
+
+        assert y.size(1) == combined_fake_hsqc.size(0)
+
+        # Add row to y for dummy residue node
+        y = torch.cat((y, torch.zeros(1, combined_fake_hsqc.size(0))))
+
+        # Set dummy residue node attention to fake hsqc peaks to 1.
+        y[-1, self.num_residues:] = 1
+
+        return residues, combined_fake_hsqc, y
+
+    def _handle_missing_hsqc_peaks(self, n_missing_peaks, fake_hsqc, y):
+        # Get indices of residues size
+        # Sample only up to original residue size so that we do not mess with the dummy residue or extra peaks that may have been added
+        indices = torch.arange(0, self.num_residues).float()
+
+        # Sample over those indices with replacement for n_missing_peaks
+        # set replacement to False since we want the randomly chosen missing peaks to be unique
+        idx = indices.multinomial(n_missing_peaks, replacement=False)
+        keep = torch.ones(fake_hsqc.size(0), dtype=bool)
+        keep[idx] = False
+
+        # Index fake_hsqc to only grab kept peaks
+        reduced_fake_hsqc = fake_hsqc[keep]
+
+        ## y also has to change to reflect missing peaks ##
+        y = y[:, keep]
+
+        assert y.size(1) == reduced_fake_hsqc.size(0)
+
+        return reduced_fake_hsqc, y
+
 
 def _gen_fake_noe(fake_hsqc, contacts, base_index):
     edges_m = []
