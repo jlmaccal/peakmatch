@@ -11,12 +11,14 @@ class PeakMatchModel(pl.LightningModule):
         super().__init__()
 
         self.init_embed = InitalEmbedLayer()
-        self.gps = GPSLayer(dim_h=128, num_heads=4)
+        self.gps1 = GPSLayer(dim_h=128, num_heads=4)
+        self.gps2 = GPSLayer(dim_h=128, num_heads=4)
         self.readout = ReadoutLayer()
 
     def forward(self, batch):
         batch = self.init_embed(batch)
-        batch = self.gps(batch)
+        batch = self.gps1(batch)
+        batch = self.gps2(batch)
         output = self.readout(batch)
         return output
 
@@ -25,8 +27,27 @@ class PeakMatchModel(pl.LightningModule):
         loss = 0.0
         for x, y in results:
             loss += cross_entropy(x, y)
+        self.log("my_loss", loss,)
         return loss
 
     def configure_optimizers(self):
         optimizer = optim.Adam(self.parameters(), 3e-4)
-        return optimizer
+        scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=10)
+        return {
+            "optimizer": optimizer, 
+            "lr_scheduler": {
+                "scheduler": scheduler,
+                "interval": "epoch",
+                "frequency": 1,
+                "monitor": "loss",
+                "strict": True,
+                "name": None,
+                }
+            }
+    
+    # def configure_optimizers(self):
+    #     gen_opt = optim.Adam(self.model.parameters(), lr=0.01)
+    #     dis_opt = optim.Adam(self.model.parameters(), lr=0.02)
+    #     dis_sch = optim.CosineAnnealing(dis_opt, T_max=10)
+    #     return [gen_opt, dis_opt], [dis_sch]
+

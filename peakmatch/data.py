@@ -11,13 +11,14 @@ PeakData = namedtuple(
 
 
 class PeakMatchAugmentedDataset(torch.utils.data.IterableDataset):
-    def __init__(self, residues, predicted_contacts, missing_peak_frac = 0.10, extra_peak_frac = 0.10 ):
+    def __init__(self, residues, predicted_contacts, missing_peak_frac = 0.10, extra_peak_frac = 0.10, hsqc_noise=0.2):
         self.residues = residues
         self.num_residues = self.residues.size(0)
         self.predicted_contacts = to_undirected(predicted_contacts, self.num_residues)
         self.num_predicted_contacts = self.predicted_contacts.size(1)
         self.missing_peak_frac = missing_peak_frac
         self.extra_peak_frac = extra_peak_frac 
+        self.hsqc_noise = hsqc_noise 
         self.dummy_res_node = 0
                
     def __iter__(self):
@@ -29,17 +30,25 @@ class PeakMatchAugmentedDataset(torch.utils.data.IterableDataset):
         contacts = self.predicted_contacts.clone()
 
         # Sample extra and missing peaks
-        fake_hsqc = torch.normal(mean=residues, std=0.2)
+        fake_hsqc = torch.normal(mean=residues, std=self.hsqc_noise)
         n_extra_peaks = np.round(self.num_residues * self.extra_peak_frac).astype(int)
         n_missing_peaks = np.round(self.num_residues * self.missing_peak_frac).astype(int)
+
+        
 
         y = torch.eye(self.num_residues)
 
         # handle effects of additional and missing peaks
         if n_extra_peaks > 0:
             residues, fake_hsqc, y = self._handle_extra_hsqc_peaks(residues, n_extra_peaks, fake_hsqc, y)
+            
         if n_missing_peaks > 0:
             fake_hsqc, y = self._handle_missing_hsqc_peaks(n_missing_peaks, fake_hsqc, y)
+
+        # print(f"{fake_hsqc.size(0)}, {n_extra_peaks}, {n_missing_peaks}")
+        # print(f"{y.shape}")
+        # print(f"{y}")
+        # die
 
         y = y.flatten()
 
