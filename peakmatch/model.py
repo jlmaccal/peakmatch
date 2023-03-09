@@ -1,6 +1,7 @@
 from torch import optim
 from torch.nn.functional import cross_entropy, softmax
 import pytorch_lightning as pl
+import torchmetrics
 from .layers.initembed import InitalEmbedLayer
 from .layers.readout import ReadoutLayer
 from .layers.gps import GPSLayer
@@ -14,6 +15,7 @@ class PeakMatchModel(pl.LightningModule):
         self.gps1 = GPSLayer(dim_h=128, num_heads=4)
         self.gps2 = GPSLayer(dim_h=128, num_heads=4)
         self.readout = ReadoutLayer()
+        self.accuracy = torchmetrics.Accuracy(task = 'binary', threshold = 1e-2, multidim_average='global')
 
     def forward(self, batch):
         batch = self.init_embed(batch)
@@ -25,9 +27,11 @@ class PeakMatchModel(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         results = self.forward(batch)
         loss = 0.0
+        accuracy = 0.0
         for x, y in results:
             loss += cross_entropy(x, y)
-        self.log("my_loss", loss,)
+            accuracy += self.accuracy(x, y)
+        self.log_dict({"loss": loss, "binary_accuracy": accuracy / len(batch)}, on_step=True, on_epoch=True, prog_bar=False, batch_size = len(batch) )
         return loss
 
     def configure_optimizers(self):
