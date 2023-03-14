@@ -5,7 +5,6 @@ class PeakHandler():
     def __init__(self, nresidues, pred_res_hsqc, hsqc_noise = 0.0):
         self.nres = nresidues
         self.nhsqc = nresidues
-        self._total_nodes = self.nres + self.nhsqc + 2 # Plus 2 for dummy residue node and virtual node
         self.pred_res_hsqc = pred_res_hsqc
         self.res_indices = torch.arange(0, self.nres).float()
         self.hsqc_noise = hsqc_noise
@@ -63,8 +62,6 @@ class PeakHandler():
         
         return torch.stack(fake_hsqc), missing_peaks
                                  
-                                 
-                
     
     def create_y(self):
         return [self.d_hsqc_res[key] for key in self.d_hsqc_res.keys()]
@@ -98,7 +95,6 @@ class PeakHandler():
             n1 = fake_hsqc[peak_i, 0]
             h1 = fake_hsqc[peak_i, 1]
             h2 = fake_hsqc[peak_j, 1]
-            print(n1, h1, h2)
             
             possible1 = torch.argwhere(
                 torch.logical_and(
@@ -114,5 +110,20 @@ class PeakHandler():
             
         return torch.tensor([edges_m, edges_n], dtype=torch.long)
     
+    def create_virtual_edges(self):
+        edges1 = []
+        edges2 = []
+        # the virtual node will be at index num_nodes
+        for i in range(self.total_nodes):
+            edges1.append(i)
+            edges2.append(self.total_nodes)
+            edges1.append(self.total_nodes)
+            edges2.append(i)
+
+        return torch.tensor([edges1, edges2])
+
+    
+
+        
 
         
