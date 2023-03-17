@@ -16,6 +16,7 @@ class PeakHandler():
         self.pred_res_hsqc = torch.cat([pred_res_hsqc, torch.zeros(1,3)]) # zeros for dummy residue node
         self.res_indices = torch.arange(0, self.nres).float()
         self.hsqc_noise = hsqc_noise
+        self.peak_d = {}
         self._create_d()
         
     @property
@@ -28,7 +29,7 @@ class PeakHandler():
         for res in np.arange(self.nres):
             self.d_hsqc_res[res] = res
             
-    def add_peaks(self, n_extra_peaks):
+    def add_noise_peaks(self, n_extra_peaks):
         max_peak_id = np.max(list(self.d_hsqc_res.keys() ))
         for peak_id in np.arange(max_peak_id + 1, max_peak_id + n_extra_peaks + 1):
             self.d_hsqc_res[peak_id] = self.nres
@@ -38,25 +39,18 @@ class PeakHandler():
     def remove_peak(self, removed_peak):
         if removed_peak > self.nres:
             raise ValueError(f"{removed_peak} is greater than {self.nres}")
-        new_d = {}
-        for peak_id, res_id in self.d_hsqc_res.items():
-            if peak_id < removed_peak:
-                new_d[peak_id] = res_id
-            
-            elif peak_id == removed_peak:
-                continue
-            
-            else:
-                new_d[peak_id - 1] = res_id 
-                
-        self.d_hsqc_res = new_d
-        self.nhsqc = self.nhsqc - 1
+        self.d_hsqc_res[removed_peak] = None
+        self.nhsqc = self.nhsqc -1
+
     
     def create_fake_hsqc(self):
         fake_hsqc = []
         for peak_id in self.d_hsqc_res.keys():
-            
-            if self.d_hsqc_res[peak_id] == self.nres: # The dummy node will be at index self.nres
+
+            if self.d_hsqc_res[peak_id] == None:
+                continue
+
+            elif self.d_hsqc_res[peak_id] == self.nres: # The dummy node will be at index self.nres
                 idx = self.res_indices.multinomial(1)
                 sample = torch.normal(self.pred_res_hsqc[idx], std=self.hsqc_noise + 0.2)[0] 
                 fake_hsqc.append(sample)
@@ -72,9 +66,10 @@ class PeakHandler():
     
     def create_y(self):
         y = torch.zeros(self.nhsqc, self.nres + 1)
-        peaks = list(self.d_hsqc_res.keys())
-        assigned_residues = list(self.d_hsqc_res.values())
-        y[peaks, assigned_residues] = 1
+        #peaks = [key for key in self.d_hsqc_res.keys() if self.d_hsqc_res[key] != None]
+        assigned_residues = [value for key, value in self.d_hsqc_res.items() if self.d_hsqc_res[key] != None]
+        #print(peaks, assigned_residues)
+        y[np.arange(0, self.nhsqc), assigned_residues] = 1
         return y
         #return [self.d_hsqc_res[key] for key in self.d_hsqc_res.keys()]
         
@@ -84,6 +79,8 @@ class PeakHandler():
         edges_n = []
         base_index = self.nres + 1
         
+        self._reindex_peaks()
+
         for res_i, res_j in zip(contacts[0, :], contacts[1, :]):
             
             peak_i = [key for key, value in self.d_hsqc_res.items() if value == res_i]
@@ -102,9 +99,9 @@ class PeakHandler():
             else:
                 raise ValueError(f"Multiple peaks {peak_j} are assigned to {res_j} from contacts ")
             
-            n1 = fake_hsqc[peak_i, 0]
-            h1 = fake_hsqc[peak_i, 1]
-            h2 = fake_hsqc[peak_j, 1]
+            n1 = fake_hsqc[self.peak_d[peak_i], 0]
+            h1 = fake_hsqc[self.peak_d[peak_i], 1]
+            h2 = fake_hsqc[self.peak_d[peak_j], 1]
             
             possible1 = torch.argwhere(
                 torch.logical_and(
@@ -131,6 +128,15 @@ class PeakHandler():
             edges2.append(i)
 
         return torch.tensor([edges1, edges2])
+    
+    def _reindex_peaks(self):
+        peak_counter = 0
+        for key in self.d_hsqc_res: 
+            if self.d_hsqc_res[key] == None:
+                continue 
+            else:
+                self.peak_d[key] = peak_counter
+                peak_counter = peak_counter + 1
 
 class PeakMatchAugmentedDataset(torch.utils.data.IterableDataset):
     def __init__(self, residues, predicted_contacts, missing_peak_frac = 0.10, extra_peak_frac = 0.10, hsqc_noise=0.2):
@@ -161,7 +167,7 @@ class PeakMatchAugmentedDataset(torch.utils.data.IterableDataset):
         
         for i in np.arange(n_missing_peaks):
             peak_handler.remove_peak(i)
-        peak_handler.add_peaks(n_extra_peaks)
+        peak_handler.add_noise_peaks(n_extra_peaks)
 
         # Generate noisifed hsqc
         fake_hsqc = peak_handler.create_fake_hsqc()
