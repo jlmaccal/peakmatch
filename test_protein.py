@@ -60,19 +60,19 @@ if __name__ == "__main__":
     nrange = [95.0, 140.0]
     corange = [168.0, 182.0]
 
-    df = pd.read_csv('ucbshifts_1em7_trunc28.csv')
+    df = pd.read_csv('ucbshifts_1em7.csv')
 
     h_shifts, n_shifts, co_shifts = process_whiten_ucbshift_data(df, hrange, nrange, corange)
 
     x = np.vstack((h_shifts, n_shifts, co_shifts)).T
     x = torch.tensor(x).float()
 
-    e = gen_contacts('1em7_protein_G_H_trunc28.pdb')
+    e = gen_contacts('1em7_protein_G_H.pdb')
 
 
-    dataset = data.PeakMatchAugmentedDataset(x, e, 0.10, 0.1, hsqc_noise=0.1) 
-    loader = data.PeakMatchDataLoader(dataset, batch_size=32)
+    dataset = data.PeakMatchAugmentedDataset(x, e, 0.1, 0.1, hsqc_noise=0.1) 
+    loader = data.PeakMatchDataLoader(dataset, batch_size=16)
 
-    model = PeakMatchModel()
+    model = PeakMatchModel(dataset.num_residues)
     trainer = pl.Trainer(limit_train_batches=100, accelerator='gpu', devices=1)
     trainer.fit(model=model, train_dataloaders=loader)

@@ -66,12 +66,10 @@ class PeakHandler():
     
     def create_y(self):
         y = torch.zeros(self.nhsqc, self.nres + 1)
-        #peaks = [key for key in self.d_hsqc_res.keys() if self.d_hsqc_res[key] != None]
         assigned_residues = [value for key, value in self.d_hsqc_res.items() if self.d_hsqc_res[key] != None]
-        #print(peaks, assigned_residues)
         y[np.arange(0, self.nhsqc), assigned_residues] = 1
         return y
-        #return [self.d_hsqc_res[key] for key in self.d_hsqc_res.keys()]
+        # return torch.tensor([self.d_hsqc_res[key] for key in self.d_hsqc_res.keys() if self.d_hsqc_res[key] != None]).float()
         
     def create_fake_noe(self, fake_hsqc, contacts):
         

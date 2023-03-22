@@ -1,3 +1,4 @@
+import torch
 from torch import optim
 from torch.nn.functional import cross_entropy, softmax
 import pytorch_lightning as pl
@@ -7,15 +8,18 @@ from .layers.readout import ReadoutLayer
 from .layers.gps import GPSLayer
 
 
+
 class PeakMatchModel(pl.LightningModule):
-    def __init__(self):
+    def __init__(self, nres):
         super().__init__()
 
+        nclasses = nres + 1
         self.init_embed = InitalEmbedLayer()
         self.gps1 = GPSLayer(dim_h=128, num_heads=4)
         self.gps2 = GPSLayer(dim_h=128, num_heads=4)
         self.readout = ReadoutLayer()
-        self.accuracy = torchmetrics.Accuracy(task = 'binary', threshold = 1e-2, multidim_average='global')
+        #self.accuracy = torchmetrics.Accuracy(task = 'binary', threshold = 1e-2, multidim_average='global')
+        self.accuracy = torchmetrics.Accuracy(num_classes=nclasses, task = 'multiclass', multidim_average='global')
 
     def forward(self, batch):
         batch = self.init_embed(batch)
@@ -30,8 +34,9 @@ class PeakMatchModel(pl.LightningModule):
         accuracy = 0.0
         for x, y in results:
             loss += cross_entropy(x, y)
-            accuracy += self.accuracy(x, y)
-        self.log_dict({"loss": loss, "binary_accuracy": accuracy / len(batch)}, on_step=True, on_epoch=True, prog_bar=False, batch_size = len(batch) )
+            accuracy += self.accuracy(torch.argmax(x, dim=0), torch.argmax(y, dim=0))
+    
+        self.log_dict({"loss": loss, "multiclass_accuracy": accuracy / len(batch)}, on_step=True, on_epoch=True, prog_bar=False, batch_size = len(batch) )
         return loss
 
     def configure_optimizers(self):
