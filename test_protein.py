@@ -16,12 +16,15 @@ def min_max_normalize(data, drange):
 def mean_normalize(data, drange):
     return ( data - np.mean(data) ) / (np.max(data) - np.min(data))
 
-def process_whiten_ucbshift_data(df, hrange, nrange, corange):
+def z_score(data):
+    return ( data - np.mean(data) ) / np.std(data)
+
+def process_whiten_ucbshift_data(df):
     h_shifts = df['H_UCBShift'].to_list()
     n_shifts = df['N_UCBShift'].to_list()
     co_shifts = df['C_UCBShift'].to_list()
     
-    return mean_normalize(h_shifts, hrange), mean_normalize(n_shifts, nrange), mean_normalize(co_shifts, corange)
+    return z_score(h_shifts), z_score(n_shifts), z_score(co_shifts)
 
 def gen_contacts(pdb_filename):
 
@@ -56,16 +59,17 @@ def gen_contacts(pdb_filename):
 if __name__ == "__main__":
     # completely arbitrary min and maxes. need to figure out more realistic values
     # not doing anything currently.
-    hrange=[6.0, 11.0]
-    nrange = [95.0, 140.0]
-    corange = [168.0, 182.0]
+    #hrange=[6.0, 11.0]
+    #nrange = [95.0, 140.0]
+    #corange = [168.0, 182.0]
 
     df = pd.read_csv('ucbshifts_1em7.csv')
 
-    h_shifts, n_shifts, co_shifts = process_whiten_ucbshift_data(df, hrange, nrange, corange)
+    h_shifts, n_shifts, co_shifts = process_whiten_ucbshift_data(df)
 
     x = np.vstack((h_shifts, n_shifts, co_shifts)).T
     x = torch.tensor(x).float()
+    #x = torch.randn(x.shape[0], 3).float()
 
     e = gen_contacts('1em7_protein_G_H.pdb')
 
