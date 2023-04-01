@@ -19,12 +19,15 @@ def mean_normalize(data, drange):
 def z_score(data):
     return ( data - np.mean(data) ) / np.std(data)
 
-def process_whiten_ucbshift_data(df):
-    h_shifts = df['H_UCBShift'].to_list()
-    n_shifts = df['N_UCBShift'].to_list()
-    co_shifts = df['C_UCBShift'].to_list()
+def transform_data(data, drange, a = -1, b = 1):
+    return (b - a) * ( (data - drange[0]) / (drange[1] - drange[0])  ) + a
+
+def process_whiten_ucbshift_data(df, hrange, nrange, corange):
+    h_shifts = df['H_UCBShift'].to_numpy()
+    n_shifts = df['N_UCBShift'].to_numpy()
+    co_shifts = df['C_UCBShift'].to_numpy()
     
-    return z_score(h_shifts), z_score(n_shifts), z_score(co_shifts)
+    return transform_data(h_shifts, hrange), transform_data(n_shifts, nrange), transform_data(co_shifts, corange)
 
 def gen_contacts(pdb_filename):
 
@@ -57,24 +60,31 @@ def gen_contacts(pdb_filename):
     return torch.tensor([src, dst], dtype=torch.long)
     
 if __name__ == "__main__":
-    # completely arbitrary min and maxes. need to figure out more realistic values
-    # not doing anything currently.
-    #hrange=[6.0, 11.0]
-    #nrange = [95.0, 140.0]
-    #corange = [168.0, 182.0]
+    # these are calculated from avg shift values for each residue and atom provided by bmrb
+    hrange = (7.3, 9.3)
+    nrange = (103.3, 129.7)
+    corange = (169.8, 181.8)
 
     df = pd.read_csv('ucbshifts_1em7.csv')
 
-    h_shifts, n_shifts, co_shifts = process_whiten_ucbshift_data(df)
+    h_shifts, n_shifts, co_shifts = process_whiten_ucbshift_data(df, hrange, nrange, corange)
 
-    x = np.vstack((h_shifts, n_shifts, co_shifts)).T
+    x = np.vstack((n_shifts, h_shifts, co_shifts)).T
     x = torch.tensor(x).float()
     #x = torch.randn(x.shape[0], 3).float()
 
     e = gen_contacts('1em7_protein_G_H.pdb')
 
+    # From UCBShift RMSE for H, N, C is 0.45, 2.61, 1.14 ppm, respectively.
+    # The values we give the dataset are those values divided by hrange, nrange, corange.
+    noise_h = 0.45 / (hrange[1] - hrange[0])
+    noise_n = 2.61 / (nrange[1] - nrange[0])
+    noise_c = 1.14 / (corange[1] - corange[0])
 
-    dataset = data.PeakMatchAugmentedDataset(x, e, 0.1, 0.1, hsqc_noise=0.1) 
+    # NOE threshold is currently arbitrary
+    dataset = data.PeakMatchAugmentedDataset(x, e, 0.4, 0.4, 
+                                             hsqc_noise_h= noise_h, hsqc_noise_n = noise_n, hsqc_noise_c = noise_c, 
+                                             noe_frac=0.8, noe_threshold=0.01) 
     loader = data.PeakMatchDataLoader(dataset, batch_size=16)
 
     model = PeakMatchModel(dataset.num_residues)

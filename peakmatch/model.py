@@ -34,7 +34,8 @@ class PeakMatchModel(pl.LightningModule):
         accuracy = 0.0
         for x, y in results:
             loss += cross_entropy(x, y)
-            accuracy += self.accuracy(torch.argmax(x, dim=0), torch.argmax(y, dim=0))
+           # accuracy += self.accuracy(torch.argmax(x, dim=0), torch.argmax(y, dim=0))
+            accuracy += self.accuracy(x, y)
     
         self.log_dict({"loss": loss, "multiclass_accuracy": accuracy / len(batch)}, on_step=True, on_epoch=True, prog_bar=False, batch_size = len(batch) )
         return loss
