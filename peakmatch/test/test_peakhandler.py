@@ -1,5 +1,5 @@
 import torch
-from peakmatch.data import PeakHandler
+from ..data import PeakHandler
 
 import numpy as np
 
