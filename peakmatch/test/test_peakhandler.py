@@ -1,211 +1,280 @@
 import torch
-from ..data import PeakHandler
-
+from ..peakhandler import (
+    PeakHandler,
+    ResidueData,
+    PeakNoiseAndMatchParams,
+    generate_sample,
+    _compute_noe_matches,
+)
 import numpy as np
-
 import unittest
 
 
-class TestPeakHandler(unittest.TestCase):
+class TestGenerateSample(unittest.TestCase):
     def setUp(self):
-        self.N = 5
-        self.x = torch.randn(self.N, 3).float()
+        self.residues = {
+            2: ResidueData(0.0, 1.0, 2.0),
+            4: ResidueData(3.0, 4.0, 5.0),
+        }
+        self.contacts = [(2, 4)]
+        self.params = PeakNoiseAndMatchParams()
 
-        e1 = list(range(0, self.N - 1))
-        e2 = list(range(1, self.N))
-        self.e = torch.tensor([e1, e2], dtype=torch.long)
+    def test_should_work_with_defaults(self):
+        # This is a stupid test... it just makes sure
+        # there isn't an exception
+        generate_sample(self.residues, self.contacts, self.params)
+        self.assertTrue(True)
 
-        self.PeakHandler = PeakHandler(5, self.x, 0.1)
-    
-    def test_total_nodes_init(self):
-        total_nodes = self.N + self.N + 2
-        self.assertTrue(total_nodes == self.PeakHandler.total_nodes)
-    
-    def test_total_nodes_remove_peak(self):
-        
-        total_nodes = self.N + self.N + 2 - 1
-        idx = np.random.randint(0, self.N)
-        self.PeakHandler.remove_peak(idx)
-        self.assertTrue(total_nodes == self.PeakHandler.total_nodes)
-        
-        idx = np.random.randint(0, self.N)
-        self.PeakHandler.remove_peak(idx)
-        total_nodes = self.N + self.N + 2 - 2
-        self.assertTrue(total_nodes == self.PeakHandler.total_nodes)
-        
-    def test_total_nodes_add_peaks(self):
-        idx = np.random.randint(0, 10)
-        total_nodes = self.N + self.N + 2 + idx
-        self.PeakHandler.add_noise_peaks(idx)
-        self.assertTrue(total_nodes == self.PeakHandler.total_nodes)
-        
-    def test_remove_noise_peak_raises_error(self):
-        self.PeakHandler.add_noise_peaks(3)
+    def test_should_work_with_hsqc_noise(self):
+        # This is a stupid test... it just makes sure
+        # there isn't an exception
+        generate_sample(
+            self.residues,
+            self.contacts,
+            self.params,
+            min_hsqc_completeness=0.8,
+            max_hsqc_noise=0.2,
+        )
+        self.assertTrue(True)
+
+    def test_should_work_with_noe_noise(self):
+        # This is a stupid test... it just makes sure
+        # there isn't an exception
+        generate_sample(
+            self.residues,
+            self.contacts,
+            self.params,
+            min_noe_completeness=0.8,
+            max_noe_noise=0.2,
+        )
+        self.assertTrue(True)
+
+
+class TestEmptyResidues(unittest.TestCase):
+    def test_should_raise_with_empty_residues(self):
+        residues = {}
+        contacts = [(1, 2)]
+        params = PeakNoiseAndMatchParams()
         with self.assertRaises(ValueError):
-            self.PeakHandler.remove_peak(self.N + 1)
-     
-    def test_d_hsqc_res_init(self):
-        d = {
-            0 : 0,
-            1 : 1,
-            2 : 2,
-            3 : 3,
-            4 : 4,
-        }
-        
-        self.assertTrue(d == self.PeakHandler.d_hsqc_res)
-        
-    def test_d_hsqc_res_remove_peak(self):
-        # Remove 2
-        d = {
-            0 : 0,
-            1 : 1,
-            2 : None,
-            3 : 3,
-            4 : 4,
-        }
-        
-        self.PeakHandler.remove_peak(2)
-        self.assertTrue(d == self.PeakHandler.d_hsqc_res)
-        
-        # Remove 0
-        d = {
-            0 : None,
-            1 : 1,
-            2 : None,
-            3 : 3,
-            4 : 4,
-        }
-        
-        self.PeakHandler.remove_peak(0)
-        self.assertTrue(d == self.PeakHandler.d_hsqc_res)
-        
-    def test_d_hsqc_res_add_peak(self):
-        d = {
-            0 : 0,
-            1 : 1,
-            2 : 2,
-            3 : 3,
-            4 : 4,
-            5 : 5,
-        }
-        
-        self.PeakHandler.add_noise_peaks(1)
-        self.assertTrue(d == self.PeakHandler.d_hsqc_res)
-        
-        d = {
-            0 : 0,
-            1 : 1,
-            2 : 2,
-            3 : 3,
-            4 : 4,
-            5 : 5,
-            6 : 5,
-            7 : 5,
-        }
-        
-        self.PeakHandler.add_noise_peaks(2)
-        self.assertTrue(d == self.PeakHandler.d_hsqc_res)
-    
-    def test_create_y_init(self):
-        y = torch.zeros(self.N, self.N + 1)
-        for i in np.arange(self.N):
-            y[i][i] = 1
-        self.assertTrue(torch.equal(y, self.PeakHandler.create_y()))
-        
-    def test_create_y_remove_peak(self):
-        y = torch.zeros(self.N, self.N + 1)
-        
-        for i in np.arange(self.N):
-            y[i][i] = 1
-            
-        remove_idx = np.random.randint(0, 5)
-        keep = [i for i in range(y.size(0)) if i != remove_idx]
-        y = y[[keep], :].squeeze()
-        
-        self.PeakHandler.remove_peak(remove_idx)
-        
-        self.assertTrue(torch.equal(y, self.PeakHandler.create_y()))
-        
-    def test_create_y_add_noise_peaks(self):
-        idx = np.random.randint(0, 5)
-        y = torch.zeros(self.N + idx, self.N + 1)
-        for i in np.arange(self.N):
-            y[i][i] = 1
-        for i in np.arange(self.N, self.N + idx):
-            y[i][-1] = 1
-        
-        self.PeakHandler.add_noise_peaks(idx)
-        
-        
-        self.assertTrue(torch.equal(y, self.PeakHandler.create_y()))
-        
-    def test_create_y_add_noise_peaks_remove_peaks(self):
-        n_add = np.random.randint(0, 10)
-        
-        y = torch.zeros(self.N + n_add, self.N + 1)
-        for i in np.arange(self.N):
-            y[i][i] = 1
-        for i in np.arange(self.N, self.N + n_add):
-            y[i][-1] = 1
-
-        remove_idx = np.random.randint(0, 5)
-        keep = [i for i in range(y.size(0)) if i != remove_idx]
-        y = y[[keep], :].squeeze()
-
-        if remove_idx % 2 == 0:
-            self.PeakHandler.add_noise_peaks(n_add)
-            self.PeakHandler.remove_peak(remove_idx)
-        else:
-            self.PeakHandler.remove_peak(remove_idx)
-            self.PeakHandler.add_noise_peaks(n_add)        
-            
-        self.assertTrue(torch.equal(y, self.PeakHandler.create_y()))
-        
-    def test_fake_hsqc_gen_initial(self):
-        self.PeakHandler.hsqc_noise = 0.0
-        self.assertTrue(torch.equal(self.x, self.PeakHandler.create_fake_hsqc()))
-    
-    def test_fake_hsqc_gen_initial_noise(self):
-        self.PeakHandler.hsqc_noise = 0.1
-        self.assertFalse(torch.equal(self.x, self.PeakHandler.create_fake_hsqc()))
-        
-    def test_fake_hsqc_add_remove_peaks(self):
-        n_add = np.random.randint(0, 10)
-        remove_idx = np.random.randint(0, 5)
-        
-        self.PeakHandler.add_noise_peaks(n_add)
-        self.PeakHandler.hsqc_noise = 0.0
-        fake_hsqc = self.PeakHandler.create_fake_hsqc()
-        
-        self.assertTrue(torch.equal(self.x, fake_hsqc[:self.N]))
-        self.assertFalse(torch.equal(self.x, fake_hsqc))
-        
-        self.PeakHandler.remove_peak(remove_idx)
-        fake_hsqc = self.PeakHandler.create_fake_hsqc()
-        self.assertFalse(torch.equal(self.x, fake_hsqc[:self.N]))
-        
-    
-    def test_create_fake_noe_initial(self):
-        fake_hsqc = torch.arange(0, self.N * 3).reshape(self.N, 3)
-        base_index = self.N + 1
-        noe_edges = self.PeakHandler.create_fake_noe(fake_hsqc, self.e)
-        self.assertTrue(torch.equal(self.e, noe_edges - base_index))
-        
-    def test_create_fake_noe_remove_peak(self):
-        e_remove = torch.tensor([[0, 2], [1, 3]])
-        base_index = self.N + 1
-        
-        fake_hsqc = self.PeakHandler.create_fake_hsqc()
-       # print(fake_hsqc.shape)
-        self.PeakHandler.remove_peak(2)
-        fake_hsqc = self.PeakHandler.create_fake_hsqc()
-       # print(fake_hsqc.shape)
-        
-        noe_edges = self.PeakHandler.create_fake_noe(fake_hsqc, self.e)
-        print(e_remove, noe_edges - base_index)
-        self.assertTrue(torch.equal(e_remove, noe_edges - base_index))
+            PeakHandler(residues, contacts, params)
 
 
-if __name__ == '__main__':
-    unittest.main()   
+class TestEmptyContacts(unittest.TestCase):
+    def setUp(self):
+        self.residues = {1: ResidueData(0.0, 1.0, 2.0)}
+        self.contacts = []
+        params = PeakNoiseAndMatchParams()
+        self.peak_handler = PeakHandler(self.residues, self.contacts, params)
+
+    def test_pred_noe_should_be_empty_with_empty_contacts(self):
+        expected = torch.tensor([[], []], dtype=torch.long)
+        actual = self.peak_handler.pred_noe
+        torch.testing.assert_close(actual, expected)
+
+    def test_fake_noe_should_be_empty_with_empty_contacts(self):
+        expected = torch.tensor([[], []], dtype=torch.long)
+        actual = self.peak_handler.fake_noe
+        torch.testing.assert_close(actual, expected)
+
+
+class TestPeakHandlerWithoutExtraPeaks(unittest.TestCase):
+    def setUp(self):
+        self.residues = {
+            2: ResidueData(0.0, 1.0, 2.0),
+            4: ResidueData(3.0, 4.0, 5.0),
+        }
+        self.contacts = [(2, 4)]
+        self.params = PeakNoiseAndMatchParams(noise_h=0.0, noise_n=0.0, noise_co=0.0)
+
+    def test_residue_mapping_should_be_correct(self):
+        peak_handler = PeakHandler(self.residues, self.contacts, self.params)
+        expected = {
+            2: 0,
+            4: 1,
+        }
+        actual = peak_handler.residue_mapping
+        self.assertEqual(actual, expected)
+
+    def test_pred_hsqc_should_be_correct(self):
+        peak_handler = PeakHandler(self.residues, self.contacts, self.params)
+        expected = torch.tensor(
+            [
+                [0.0, 1.0, 2.0],
+                [3.0, 4.0, 5.0],
+                [-3.0, -3.0, -3.0],  # dummy residue
+            ]
+        )
+        actual = peak_handler.pred_hsqc
+        torch.testing.assert_close(actual, expected)
+
+    def test_pred_noe_should_be_correct(self):
+        # Note: 5 is not an included peak, so (4, 5) and (5, 4)
+        #       should note be included in the final set of contacts
+        contacts = [(2, 4), (4, 5), (5, 4)]
+        peak_handler = PeakHandler(self.residues, contacts, self.params)
+        expected = torch.tensor([[0, 1], [1, 0]])
+        actual = peak_handler.pred_noe
+        torch.testing.assert_close(actual, expected)
+
+    def test_fake_hsqc_should_be_correct(self):
+        peak_handler = PeakHandler(self.residues, self.contacts, self.params)
+        expected = torch.tensor(
+            [
+                [0.0, 1.0, 2.0],
+                [3.0, 4.0, 5.0],
+            ]
+        )
+        actual = peak_handler.fake_hsqc
+        torch.testing.assert_close(actual, expected)
+
+    def test_correspondence_should_be_correct(self):
+        peak_handler = PeakHandler(self.residues, self.contacts, self.params)
+        expected = torch.tensor([0, 1])
+        actual = peak_handler.corresponence
+        torch.testing.assert_close(actual, expected)
+
+    def test_fake_noe_should_be_correct(self):
+        peak_handler = PeakHandler(self.residues, self.contacts, self.params)
+        # + 3 due to 2 pred_hsqc peaks and 1 dummy residue
+        expected = torch.tensor([[0, 1], [1, 0]]) + 3
+        actual = peak_handler.fake_noe
+        torch.testing.assert_close(actual, expected)
+
+    def test_n_pred_hsqc_should_be_correct(self):
+        peak_handler = PeakHandler(self.residues, self.contacts, self.params)
+        expected = 2  # +1 due to dummy residue
+        actual = peak_handler.n_pred_hsqc
+        self.assertEqual(actual, expected)
+
+    def test_n_pred_hsqc_nodes_should_be_correct(self):
+        peak_handler = PeakHandler(self.residues, self.contacts, self.params)
+        expected = 3  # +1 due to dummy residue
+        actual = peak_handler.n_pred_hsqc_nodes
+        self.assertEqual(actual, expected)
+
+    def test_n_fake_hsqc_should_be_correct(self):
+        peak_handler = PeakHandler(self.residues, self.contacts, self.params)
+        expected = 2
+        actual = peak_handler.n_fake_hsqc
+        self.assertEqual(actual, expected)
+
+    def test_n_fake_hsqc_nodes_should_be_correct(self):
+        peak_handler = PeakHandler(self.residues, self.contacts, self.params)
+        expected = 2
+        actual = peak_handler.n_fake_hsqc_nodes
+        self.assertEqual(actual, expected)
+
+    def test_dummy_hsqc_index_should_be_correct(self):
+        peak_handler = PeakHandler(self.residues, self.contacts, self.params)
+        expected = 2
+        actual = peak_handler.dummy_residue_index
+        self.assertEqual(actual, expected)
+
+    def test_fake_hsqc_offset_should_be_correct(self):
+        peak_handler = PeakHandler(self.residues, self.contacts, self.params)
+        expected = 3
+        actual = peak_handler.fake_hsqc_offset
+        self.assertEqual(actual, expected)
+
+    def test_virtual_node_index_should_be_correct(self):
+        peak_handler = PeakHandler(self.residues, self.contacts, self.params)
+        expected = 2 + 2 + 1
+        actual = peak_handler.virtual_node_index
+        self.assertEqual(actual, expected)
+
+    def test_virtual_edges_should_be_correct(self):
+        peak_handler = PeakHandler(self.residues, self.contacts, self.params)
+        expected = torch.tensor(
+            [[0, 1, 2, 3, 4], [5, 5, 5, 5, 5]],
+            dtype=torch.long,
+        )
+        actual = peak_handler.virtual_edges
+        torch.testing.assert_close(actual, expected)
+
+
+class TestNOEMatch(unittest.TestCase):
+    def test_should_match(self):
+        peaks = torch.tensor(
+            [
+                [0.0, 1.0, 2.0],
+                [3.0, 4.0, 5.0],
+                [6.0, 7.0, 8.0],
+            ]
+        )
+        h1 = 0.0
+        n1 = 1.0
+        h2 = 3.0
+        actual = _compute_noe_matches(peaks, h1, n1, h2, 0.1, 0.1, 0.1)
+        expected = torch.tensor([[0], [1]])
+        torch.testing.assert_close(actual, expected)
+
+    def test_should_match_with_first_peak_duplicate(self):
+        peaks = torch.tensor(
+            [
+                [0.0, 1.0, 2.0],
+                [0.0, 1.0, 2.0],
+                [6.0, 7.0, 8.0],
+            ]
+        )
+        h1 = 0.0
+        n1 = 1.0
+        h2 = 6.0
+        actual = _compute_noe_matches(peaks, h1, n1, h2, 0.1, 0.1, 0.1)
+        expected = torch.tensor([[0, 1], [2, 2]])
+        torch.testing.assert_close(actual, expected)
+
+    def test_should_match_with_second_peak_duplicate(self):
+        peaks = torch.tensor(
+            [
+                [0.0, 1.0, 2.0],
+                [3.0, 4.0, 5.0],
+                [3.0, 4.0, 5.0],
+            ]
+        )
+        h1 = 0.0
+        n1 = 1.0
+        h2 = 3.0
+        actual = _compute_noe_matches(peaks, h1, n1, h2, 0.1, 0.1, 0.1)
+        expected = torch.tensor([[0, 0], [1, 2]])
+        torch.testing.assert_close(actual, expected)
+
+
+class TestPeakHandlerWithExtraPeaks(unittest.TestCase):
+    def setUp(self):
+        self.residues = {
+            2: ResidueData(0.0, 1.0, 2.0),
+            4: ResidueData(3.0, 4.0, 5.0),
+        }
+        self.contacts = [(2, 4)]
+        self.params = PeakNoiseAndMatchParams(noise_h=0.0, noise_n=0.0, noise_co=0.0)
+        self.peak_handler = PeakHandler(
+            self.residues, self.contacts, self.params, n_noise_peaks=3
+        )
+
+    def test_fake_hsqc_should_have_correct_shape(self):
+        expected = (5, 3)
+        actual = self.peak_handler.fake_hsqc.shape
+        self.assertEqual(actual, expected)
+
+    def test_correspondence_should_be_correct(self):
+        expected = torch.tensor([0, 1, 2, 2, 2])
+        actual = self.peak_handler.corresponence
+        torch.testing.assert_close(actual, expected)
+
+    def test_fake_hsqc_nodes_should_be_correct(self):
+        expected = 5
+        actual = self.peak_handler.n_fake_hsqc_nodes
+        self.assertEqual(actual, expected)
+
+    def test_virtual_node_index_should_be_correct(self):
+        expected = 2 + 5 + 1
+        actual = self.peak_handler.virtual_node_index
+        self.assertEqual(actual, expected)
+
+    def test_virtual_edges_should_be_correct(self):
+        expected = torch.tensor(
+            [[0, 1, 2, 3, 4, 5, 6, 7], [8, 8, 8, 8, 8, 8, 8, 8]],
+            dtype=torch.long,
+        )
+        actual = self.peak_handler.virtual_edges
+        torch.testing.assert_close(actual, expected)
