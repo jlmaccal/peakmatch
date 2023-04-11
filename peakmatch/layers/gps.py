@@ -23,6 +23,8 @@ class GPSLayer(nn.Module):
 
         self.dim_h = dim_h
         self.num_heads = num_heads
+        self.local_gnn_type = 'gatedgcn'
+        self.global_model_type = 'graphgps'
         self.attn_dropout = attn_dropout
         self.layer_norm = layer_norm
         self.batch_norm = batch_norm

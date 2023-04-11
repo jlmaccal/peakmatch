@@ -9,13 +9,21 @@ ResidueData = namedtuple("ResidueData", "shift_h shift_n shift_co")
 
 @dataclass
 class PeakNoiseAndMatchParams:
-    noise_h: float = 0.1  # noise added in h dimension
-    noise_n: float = 0.1  # noise added in n dimension
-    noise_co: float = 0.1  # noise added in co dimension
+    # these are calculated from avg shift values for each residue and atom provided by bmrb
+    hrange : tuple = (7.3, 9.3)
+    nrange : tuple = (103.3, 129.7)
+    corange : tuple = (169.8, 181.8)
+
+    # From UCBShift RMSE for H, N, C is 0.45, 2.61, 1.14 ppm, respectively.
+    # The values we give the dataset are those values divided by hrange, nrange, corange.
+    noise_h: float = 0.45 / (hrange[1] - hrange[0])  # noise added in h dimension
+    noise_n: float = 2.61 / (nrange[1] - nrange[0])  # noise added in n dimension
+    noise_co: float = 1.14 / (corange[1] - corange[0]) # noise added in co dimension
+
     noise_peak_factor: float = 3.0  # scale up noise added for extra peaks
-    threshold_h1: float = 0.1  # tolerance for matching in h1 dimension
-    threshold_n1: float = 0.1  # tolerance for matching in n1 dimension
-    threshold_h2: float = 0.1  # tolerance for matching in h2 dimension
+    threshold_h1: float = 0.05  # tolerance for matching in h1 dimension
+    threshold_n1: float = 0.05  # tolerance for matching in n1 dimension
+    threshold_h2: float = 0.05  # tolerance for matching in h2 dimension
 
 
 def generate_sample(
@@ -153,7 +161,7 @@ class PeakHandler:
         # A tensor of predicted hsqcs, including dummy residue
         self.pred_hsqc = self._compute_pred_hsqc(residues)
         # A tensor that maps each fake_hsqc peak to the correpsonding pred_hsqc peak
-        self.corresponence = self._compute_correspondence()
+        self.correspondence = self._compute_correspondence()
         # A tensor of predicted noe edges
         self.pred_noe = self._compute_pred_noe(contacts)
         # A tensor of fake hsqcs, including extra peaks
@@ -190,6 +198,10 @@ class PeakHandler:
     @property
     def virtual_node_index(self):
         return self.n_pred_hsqc_nodes + self.n_fake_hsqc_nodes
+    
+    @property
+    def n_nodes(self):
+        return self.n_pred_hsqc_nodes + self.n_fake_hsqc_nodes + 1
 
     def _compute_residue_mapping(self, residues):
         if not residues:

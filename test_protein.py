@@ -3,6 +3,7 @@ import pytorch_lightning as pl
 from peakmatch import data
 from peakmatch.layers import initembed, readout
 from peakmatch.model import PeakMatchModel
+from pytorch_lightning import loggers as pl_loggers
 
 import mdtraj as md
 import pandas as pd
@@ -57,7 +58,12 @@ def gen_contacts(pdb_filename):
             if dist < 0.5:
                 src.append(i)
                 dst.append(j)
-    return torch.tensor([src, dst], dtype=torch.long)
+    pairs = []
+    for i, j in zip(src, dst):
+        pairs = []
+        pairs.append((i, j))
+    return pairs
+    #return torch.tensor([src, dst], dtype=torch.long)
     
 if __name__ == "__main__":
     # these are calculated from avg shift values for each residue and atom provided by bmrb
@@ -75,18 +81,20 @@ if __name__ == "__main__":
 
     e = gen_contacts('1em7_protein_G_H.pdb')
 
-    # From UCBShift RMSE for H, N, C is 0.45, 2.61, 1.14 ppm, respectively.
-    # The values we give the dataset are those values divided by hrange, nrange, corange.
-    noise_h = 0.45 / (hrange[1] - hrange[0])
-    noise_n = 2.61 / (nrange[1] - nrange[0])
-    noise_c = 1.14 / (corange[1] - corange[0])
 
     # NOE threshold is currently arbitrary
-    dataset = data.PeakMatchAugmentedDataset(x, e, 0.4, 0.4, 
-                                             hsqc_noise_h= noise_h, hsqc_noise_n = noise_n, hsqc_noise_c = noise_c, 
-                                             noe_frac=0.8, noe_threshold=0.01) 
+    dataset = data.PeakMatchAugmentedDataset(
+                                            x, 
+                                            e,
+                                            min_hsqc_completeness=0.75,
+                                            max_hsqc_noise=0.2,
+                                            min_noe_completeness=0.4,
+                                            max_noe_noise=0.3,
+                                            ) 
+    
     loader = data.PeakMatchDataLoader(dataset, batch_size=16)
 
     model = PeakMatchModel(dataset.num_residues)
-    trainer = pl.Trainer(limit_train_batches=100, accelerator='gpu', devices=1)
+    tensorboard = pl_loggers.TensorBoardLogger(save_dir="")
+    trainer = pl.Trainer(limit_train_batches=100, logger=tensorboard, )#accelerator='gpu', devices=1)
     trainer.fit(model=model, train_dataloaders=loader)

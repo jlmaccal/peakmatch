@@ -2,90 +2,80 @@ import torch
 from .laplacian import get_laplacian
 from torch_geometric.utils import to_undirected
 from collections import namedtuple
-import numpy as np
-import random
+from .peakhandler import ResidueData
+from .peakhandler import PeakNoiseAndMatchParams
+from .peakhandler import generate_sample
 
+PeakData = namedtuple(
+    "PeakData",
+    "res hsqc contact_edges noe_edges virtual_edges edge_index eig_vecs eig_vals num_nodes y",
+)
 
 class PeakMatchAugmentedDataset(torch.utils.data.IterableDataset):
     def __init__(
         self,
         residues,
         predicted_contacts,
-        missing_peak_frac=0.10,
-        extra_peak_frac=0.10,
-        hsqc_noise_h=0.2,
-        hsqc_noise_n=0.2,
-        hsqc_noise_c=0.2,
-        noe_frac=1.0,
-        noe_threshold=0.05,
+        min_hsqc_completeness=1.0,
+        max_hsqc_noise=0.0,
+        min_noe_completeness=1.0,
+        max_noe_noise=0.0,
     ):
         self.residues = residues
         self.num_residues = self.residues.size(0)
-        self.predicted_contacts = to_undirected(predicted_contacts, self.num_residues)
-        self.num_predicted_contacts = self.predicted_contacts.size(1)
-        self.missing_peak_frac = missing_peak_frac
-        self.extra_peak_frac = extra_peak_frac
-        self.noe_frac = noe_frac
-        self.hsqc_noise_n = hsqc_noise_n
-        self.hsqc_noise_h = hsqc_noise_h
-        self.hsqc_noise_c = hsqc_noise_c
-        self.dummy_res_node = 0
-        self.threshold = noe_threshold
+        self.predicted_contacts = predicted_contacts
+        self.num_predicted_contacts = len(predicted_contacts)
+        self.min_hsqc_completeness = min_hsqc_completeness
+        self.max_hsqc_noise = max_hsqc_noise
+        self.min_noe_completeness = min_noe_completeness
+        self.max_noe_noise = max_noe_noise
+
 
     def __iter__(self):
         return self
 
     def __next__(self):
         residues = self.residues.clone()
-        contacts = self.predicted_contacts.clone()
+        contacts = self.predicted_contacts.copy()
 
-        peak_handler = PeakHandler(
-            self.num_residues,
-            residues,
-            hsqc_noise_n=self.hsqc_noise_n,
-            hsqc_noise_h=self.hsqc_noise_n,
-            hsqc_noise_c=self.hsqc_noise_c,
-        )
+        res_d = {}
+        for residx, shifts in enumerate(residues):
+            
+            resdata = ResidueData(
+                shift_h = shifts[0],
+                shift_n = shifts[1],
+                shift_co = shifts[2],
+            )
 
-        # Sample extra peaks
-        extra_peaks = np.random.uniform(0, self.extra_peak_frac)
-        missing_peaks = np.random.uniform(0, self.missing_peak_frac)
-        n_missing_peaks = np.round(self.num_residues * missing_peaks).astype(int)
-        n_extra_peaks = np.round(self.num_residues * extra_peaks).astype(int)
+            res_d[residx] = resdata 
+        
+        params = PeakNoiseAndMatchParams()
 
-        for i in np.arange(n_missing_peaks):
-            peak_handler.remove_peak(i)
-        peak_handler.add_noise_peaks(n_extra_peaks)
+        peak_handler = generate_sample( 
+                                        res_d, 
+                                        contacts, 
+                                        params,
+                                        self.min_hsqc_completeness,
+                                        self.max_hsqc_noise,
+                                        self.min_noe_completeness,
+                                        self.max_noe_noise,
+                                       )
 
-        # Generate noisifed hsqc
-        fake_hsqc = peak_handler.create_fake_hsqc()
-
-        # Create y, will handle missing and extra peaks.
-        y = peak_handler.create_y()
-
-        y = y.flatten()
-
-        # handle edges
-        noe_edges = peak_handler.create_fake_noe(
-            fake_hsqc, contacts, self.noe_frac, self.threshold
-        )
-        virtual_edges = peak_handler.create_virtual_edges()
-        edge_index = torch.cat([contacts, noe_edges, virtual_edges], dim=1)
-
-        num_nodes = peak_handler.total_nodes
+        edge_index = torch.cat([peak_handler.pred_noe, peak_handler.fake_noe, peak_handler.virtual_edges], dim=1)
+        num_nodes = peak_handler.n_nodes
         eig_vecs, eig_vals = get_laplacian(edge_index, num_nodes)
 
         return PeakData(
-            res=peak_handler.pred_res_hsqc,
-            hsqc=fake_hsqc,
-            contact_edges=contacts,
-            noe_edges=noe_edges,
-            virtual_edges=virtual_edges,
+            res=peak_handler.pred_hsqc,
+            hsqc=peak_handler.fake_hsqc,
+            contact_edges=peak_handler.pred_noe,
+            noe_edges=peak_handler.fake_noe,
+            virtual_edges=peak_handler.virtual_edges,
             edge_index=edge_index,
             eig_vecs=eig_vecs,
             eig_vals=eig_vals,
             num_nodes=num_nodes,
-            y=y,
+            y=peak_handler.correspondence,
         )
 
 
