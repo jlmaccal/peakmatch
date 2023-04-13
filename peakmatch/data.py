@@ -5,6 +5,7 @@ from collections import namedtuple
 from .peakhandler import ResidueData
 from .peakhandler import PeakNoiseAndMatchParams
 from .peakhandler import generate_sample
+import pytorch_lightning as pl
 
 PeakData = namedtuple(
     "PeakData",
@@ -117,3 +118,25 @@ class PeakMatchDataLoader(torch.utils.data.DataLoader):
             persistent_workers=persistent_workers,
             pin_memory_device=pin_memory_device,
         )
+
+class PeakMatchDataModule(pl.LightningDataModule):
+    def __init__(self, loader: PeakMatchDataLoader, batch_size: int = 32):
+        super().__init__()
+        self.loader = loader
+        self.batch_size = batch_size
+
+    def setup(self, stage: str):
+        self.peak_val = next(iter(self.loader))
+        #self.peak_val = self.loader
+
+    def train_dataloader(self):
+        return self.loader
+
+    def val_dataloader(self):
+        return PeakMatchDataLoader(self.peak_val, batch_size=self.batch_size)
+
+    def test_dataloader(self):
+        pass
+
+    def predict_dataloader(self):
+        pass

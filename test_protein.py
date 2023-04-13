@@ -83,18 +83,19 @@ if __name__ == "__main__":
 
 
     # NOE threshold is currently arbitrary
+    batch_size = 32
     dataset = data.PeakMatchAugmentedDataset(
                                             x, 
                                             e,
-                                            min_hsqc_completeness=0.75,
-                                            max_hsqc_noise=0.2,
-                                            min_noe_completeness=0.4,
-                                            max_noe_noise=0.3,
+                                            min_hsqc_completeness=0.8,
+                                            max_hsqc_noise=0.1,
+                                            min_noe_completeness=0.75,
+                                            max_noe_noise=0.1,
                                             ) 
     
-    loader = data.PeakMatchDataLoader(dataset, batch_size=16)
-
-    model = PeakMatchModel(dataset.num_residues)
+    loader = data.PeakMatchDataLoader(dataset, batch_size=batch_size)
+    dm = data.PeakMatchDataModule(loader)
+    model = PeakMatchModel(batch_size=batch_size)
     tensorboard = pl_loggers.TensorBoardLogger(save_dir="")
-    trainer = pl.Trainer(limit_train_batches=100, logger=tensorboard, )#accelerator='gpu', devices=1)
-    trainer.fit(model=model, train_dataloaders=loader)
+    trainer = pl.Trainer(limit_train_batches=100, num_sanity_val_steps=0, logger=tensorboard, accelerator='gpu', devices=1)
+    trainer.fit(model=model, datamodule=dm, )

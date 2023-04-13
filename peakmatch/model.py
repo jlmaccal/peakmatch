@@ -6,19 +6,18 @@ import torchmetrics
 from .layers.initembed import InitalEmbedLayer
 from .layers.readout import ReadoutLayer
 from .layers.gps import GPSLayer
+from torchmetrics.functional.classification import multiclass_accuracy
 
 
 
 class PeakMatchModel(pl.LightningModule):
-    def __init__(self, nres):
+    def __init__(self, batch_size):
         super().__init__()
-
-        self.nres = nres
-        self.nclasses = nres + 1
         self.init_embed = InitalEmbedLayer()
         self.gps1 = GPSLayer(dim_h=128, num_heads=4)
         self.gps2 = GPSLayer(dim_h=128, num_heads=4)
         self.readout = ReadoutLayer()
+        self.batch_size = batch_size
         #self.accuracy = torchmetrics.Accuracy(task = 'binary', threshold = 1e-2, multidim_average='global')
         #self.accuracy = torchmetrics.Accuracy(num_classes=self.nclasses, task = 'multiclass', multidim_average='global')
 
@@ -32,18 +31,21 @@ class PeakMatchModel(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         results = self.forward(batch)
         loss = 0.0
+        for x, y in results:
+            loss += cross_entropy(x, y)
+    
+        self.log_dict({"loss": loss}, on_step=True, prog_bar=False, batch_size = self.batch_size )
+        return {'loss': loss, 'x': x, 'y': y, }
+    
+    def validation_step(self, batch, batch_idx):
+        results = self.forward(batch)
+        loss = 0.0
         accuracy = 0.0
         for x, y in results:
             loss += cross_entropy(x, y)
-            #accuracy += self.accuracy(x, y)
-    
-        #self.log_dict({"loss": loss, "multiclass_accuracy": accuracy / len(batch)}, on_step=True, on_epoch=True, prog_bar=False, batch_size = len(batch) )
-        return {'loss': loss, 'x': x, 'y': y, }
-    
-    # def training_epoch_end(self, outputs):
-    #     sample = outputs['x'][-1]
-
-
+            accuracy += multiclass_accuracy(x, y, num_classes=x.size(1))
+        self.log_dict({"val_loss": loss, 'val_accuracy': accuracy / self.batch_size}, on_epoch=True, prog_bar=False, batch_size = self.batch_size)
+        return loss, accuracy
 
     def configure_optimizers(self):
         optimizer = optim.Adam(self.parameters(), 3e-4)
