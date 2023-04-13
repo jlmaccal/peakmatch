@@ -97,5 +97,5 @@ if __name__ == "__main__":
     dm = data.PeakMatchDataModule(loader)
     model = PeakMatchModel(batch_size=batch_size)
     tensorboard = pl_loggers.TensorBoardLogger(save_dir="")
-    trainer = pl.Trainer(limit_train_batches=100, num_sanity_val_steps=0, logger=tensorboard, accelerator='gpu', devices=1)
+    trainer = pl.Trainer(limit_train_batches=100, logger=tensorboard, accelerator='gpu', devices=1)
     trainer.fit(model=model, datamodule=dm, )

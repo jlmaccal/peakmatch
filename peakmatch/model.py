@@ -7,6 +7,7 @@ from .layers.initembed import InitalEmbedLayer
 from .layers.readout import ReadoutLayer
 from .layers.gps import GPSLayer
 from torchmetrics.functional.classification import multiclass_accuracy
+from .plots import *
 
 
 
@@ -41,10 +42,18 @@ class PeakMatchModel(pl.LightningModule):
         results = self.forward(batch)
         loss = 0.0
         accuracy = 0.0
-        for x, y in results:
+        figs = []
+        for idx, (x, y) in enumerate(results):
             loss += cross_entropy(x, y)
             accuracy += multiclass_accuracy(x, y, num_classes=x.size(1))
+            figs.append(gen_assignment_fig(batch[idx].res.cpu(), 
+                                           batch[idx].hsqc.cpu(), 
+                                           x.cpu(), 
+                                           y.cpu(),
+                                           )
+                                        ) 
         self.log_dict({"val_loss": loss, 'val_accuracy': accuracy / self.batch_size}, on_epoch=True, prog_bar=False, batch_size = self.batch_size)
+        self.logger.experiment.add_figure('assign', figs)
         return loss, accuracy
 
     def configure_optimizers(self):
