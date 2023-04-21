@@ -163,17 +163,24 @@ class PeakHandler:
         self.noes_to_drop = noes_to_drop
         self.noes_to_add = noes_to_add
 
-        self._setup_residue_mapping(residues)
         # A tensor of predicted hsqcs, including dummy residue
         self.pred_hsqc = self._compute_pred_hsqc(residues)
+
+        # Set up initial mappings
+        self._setup_residue_mapping(residues)
+
         # A tensor that maps each fake_hsqc peak to the correpsonding pred_hsqc peak
         self.correspondence = self._compute_correspondence()
+
         # A tensor of predicted noe edges
         self.pred_noe = self._compute_pred_noe(contacts)
+
         # A tensor of fake hsqcs, including extra peaks
         self.fake_hsqc = self._compute_fake_hsqc()
+
         # A tensor of fake_noe edges
         self.fake_noe = self._compute_fake_noe()
+
         # A tensor of virtual edges
         self.virtual_edges = self._compute_virtual_edges()
 
@@ -396,7 +403,9 @@ class PeakHandler:
     def _choose_peaks_to_drop(self):
         if self._hsqc_peaks_to_drop > 0:
             return random.sample(
-                self.residue_to_fake_hsqc_mapping.keys(), k=self.peaks_to_drop
+                # peaks to remove should correspond to real predicted hsqc and not added
+                # therefoer use self.n_pred_hsqc and not self.n_fake_hsqc, which includes noisified and spurious peaks
+                range(0, self.n_pred_hsqc), k=self._hsqc_peaks_to_drop
             )
         else:
             return []
