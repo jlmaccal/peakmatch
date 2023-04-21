@@ -58,7 +58,9 @@ class PeakMatchModel(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizer = optim.Adam(self.parameters(), 3e-4)
-        scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=10)
+        scheduler1 = optim.lr_scheduler.LinearLR(optimizer, start_factor=1e-2, total_iters = 5)
+        scheduler2 = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=30)
+        scheduler = optim.lr_scheduler.ChainedScheduler([scheduler1, scheduler2])
         return {
             "optimizer": optimizer, 
             "lr_scheduler": {

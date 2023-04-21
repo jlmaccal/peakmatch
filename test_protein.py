@@ -4,6 +4,7 @@ from peakmatch import data
 from peakmatch.layers import initembed, readout
 from peakmatch.model import PeakMatchModel
 from pytorch_lightning import loggers as pl_loggers
+from pytorch_lightning.callbacks import LearningRateMonitor
 
 import mdtraj as md
 import pandas as pd
@@ -97,5 +98,6 @@ if __name__ == "__main__":
     dm = data.PeakMatchDataModule(loader)
     model = PeakMatchModel(batch_size=batch_size)
     tensorboard = pl_loggers.TensorBoardLogger(save_dir="")
-    trainer = pl.Trainer(limit_train_batches=100, logger=tensorboard, accelerator='gpu', devices=1)
+    lr_monitor = LearningRateMonitor(logging_interval='step')
+    trainer = pl.Trainer(limit_train_batches=100, logger=tensorboard, callbacks=[lr_monitor], accelerator='gpu', devices=1)
     trainer.fit(model=model, datamodule=dm, )
