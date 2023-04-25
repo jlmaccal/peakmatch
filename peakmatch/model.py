@@ -25,17 +25,19 @@ class PeakMatchModel(pl.LightningModule):
     def forward(self, batch):
         batch = self.init_embed(batch)
         batch = self.gps1(batch)
-        batch = self.gps2(batch)
+     #   batch = self.gps2(batch)
         output = self.readout(batch)
         return output
 
     def training_step(self, batch, batch_idx):
         results = self.forward(batch)
         loss = 0.0
+        accuracy = 0.0
         for x, y in results:
             loss += cross_entropy(x, y)
+            accuracy += multiclass_accuracy(x, y, num_classes=x.size(1))
     
-        self.log_dict({"loss": loss}, on_step=True, prog_bar=False, batch_size = self.batch_size )
+        self.log_dict({"loss": loss, 'accuracy':accuracy / self.batch_size}, on_step=True, prog_bar=False, batch_size = self.batch_size )
         return {'loss': loss, 'x': x, 'y': y, }
     
     def validation_step(self, batch, batch_idx):
@@ -43,17 +45,25 @@ class PeakMatchModel(pl.LightningModule):
         loss = 0.0
         accuracy = 0.0
         figs = []
+        entropy_figs = []
         for idx, (x, y) in enumerate(results):
             loss += cross_entropy(x, y)
             accuracy += multiclass_accuracy(x, y, num_classes=x.size(1))
-            figs.append(gen_assignment_fig(batch[idx].res.cpu(), 
-                                           batch[idx].hsqc.cpu(), 
-                                           x.cpu(), 
-                                           y.cpu(),
-                                           )
-                                        ) 
-        self.log_dict({"val_loss": loss, 'val_accuracy': accuracy / self.batch_size}, on_epoch=True, prog_bar=False, batch_size = self.batch_size)
-        self.logger.experiment.add_figure('assign', figs)
+            # figs.append(gen_assignment_fig(batch[idx].res.cpu(), 
+            #                                batch[idx].hsqc.cpu(), 
+            #                                x.cpu(), 
+            #                                y.cpu(),
+            #                                )
+            #                             ) 
+            # entropy_figs.append(plot_entropy_hsqc(
+            #                                 batch[idx].res.cpu(),
+            #                                 x.cpu(),
+
+            #                                 )
+            #                             )
+        self.log_dict({"val_loss": loss, 'val_accuracy': accuracy / self.batch_size}, on_epoch=True, prog_bar=True, batch_size = self.batch_size)
+        # self.logger.experiment.add_figure('assign', figs)
+        # self.logger.experiment.add_figure('entropy', entropy_figs)
         return loss, accuracy
 
     def configure_optimizers(self):

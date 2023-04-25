@@ -2,6 +2,8 @@ import matplotlib.pyplot as plt
 import torchmetrics
 from matplotlib.patches import ConnectionPatch
 import torch
+import numpy as np
+from scipy.stats import entropy
 
 def transform_data(data, drange, a = -1, b = 1):
     return (b - a) * ( (data - drange[0]) / (drange[1] - drange[0])  ) + a
@@ -61,3 +63,23 @@ def gen_assignment_fig(pred, fake, x, y,):
         ax.invert_yaxis()
     
     return fig
+
+def plot_entropy_hsqc(hsqc, x, ):
+    hrange = (7.3, 9.3)
+    nrange = (103.3, 129.7)
+    
+    fig, ax = plt.subplots()
+    n = transform_data(hsqc[:, 0], [-1, 1], a = nrange[0], b = nrange[1] )
+    h = transform_data(hsqc[:, 1], [-1, 1], a = hrange[0], b = hrange[1] )
+    
+    prob = np.exp(x)
+
+    e = entropy(prob)
+    
+    
+    ax.scatter(h, n, c = e, vmin = 0.0, vmax = 4.0, cmap='viridis')
+    ax.invert_yaxis()
+    ax.invert_xaxis()
+    
+    return fig
+

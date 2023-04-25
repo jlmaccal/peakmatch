@@ -14,16 +14,24 @@ class PeakNoiseAndMatchParams:
     nrange: tuple = (103.3, 129.7)
     corange: tuple = (169.8, 181.8)
 
-    # From UCBShift RMSE for H, N, C is 0.45, 2.61, 1.14 ppm, respectively.
-    # The values we give the dataset are those values divided by hrange, nrange, corange.
+    # # From UCBShift RMSE for H, N, C is 0.45, 2.61, 1.14 ppm, respectively.
+    # # The values we give the dataset are those values divided by hrange, nrange, corange.
     noise_h: float = 0.45 / (hrange[1] - hrange[0])  # noise added in h dimension
     noise_n: float = 2.61 / (nrange[1] - nrange[0])  # noise added in n dimension
     noise_co: float = 1.14 / (corange[1] - corange[0])  # noise added in co dimension
 
+    # noise_h: float = 0.0 / (hrange[1] - hrange[0])  # noise added in h dimension
+    # noise_n: float = 0.0 / (nrange[1] - nrange[0])  # noise added in n dimension
+    # noise_co: float = 0.0 / (corange[1] - corange[0])  # noise added in co dimension
+
+    # noise_h: float = 0.0
+    # noise_n: float = 0.0
+    # noise_co: float = 0.0
+
     noise_peak_factor: float = 3.0  # scale up noise added for extra peaks
-    threshold_h1: float = 0.05  # tolerance for matching in h1 dimension
-    threshold_n1: float = 0.05  # tolerance for matching in n1 dimension
-    threshold_h2: float = 0.05  # tolerance for matching in h2 dimension
+    threshold_h1: float = 0.05 / (hrange[1] - hrange[0])  # tolerance for matching in h1 dimension
+    threshold_n1: float = 0.50 / (nrange[1] - nrange[0])  # tolerance for matching in n1 dimension
+    threshold_h2: float = 0.50 / (corange[1] - corange[0])   # tolerance for matching in h2 dimension
 
 
 def generate_sample(
