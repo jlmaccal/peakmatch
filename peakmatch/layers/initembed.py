@@ -52,7 +52,7 @@ class InitalEmbedLayer(nn.Module):
             num_layers=num_layers,
             dim_pe=pos_enc_dim,
             rho_num_layers=rho_num_layers,
-            use_bn=True,
+            use_bn=False,
             dropout=0.0,
             activation="relu",
         )

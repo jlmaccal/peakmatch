@@ -17,7 +17,7 @@ class MLP(nn.Module):
         out_channels,
         num_layers,
         use_bn=False,
-        use_ln=False,
+        use_ln=True,
         dropout=0.5,
         activation="relu",
         residual=False,

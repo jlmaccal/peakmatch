@@ -16,8 +16,8 @@ class GPSLayer(nn.Module):
         activation="relu",
         dropout=0.0,
         attn_dropout=0.0,
-        layer_norm=False,
-        batch_norm=True,
+        layer_norm=True,
+        batch_norm=False,
     ):
         super().__init__()
 

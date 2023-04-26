@@ -19,8 +19,7 @@ class PeakMatchModel(pl.LightningModule):
         self.gps2 = GPSLayer(dim_h=128, num_heads=4)
         self.readout = ReadoutLayer()
         self.batch_size = batch_size
-        #self.accuracy = torchmetrics.Accuracy(task = 'binary', threshold = 1e-2, multidim_average='global')
-        #self.accuracy = torchmetrics.Accuracy(num_classes=self.nclasses, task = 'multiclass', multidim_average='global')
+
 
     def forward(self, batch):
         batch = self.init_embed(batch)
@@ -35,7 +34,7 @@ class PeakMatchModel(pl.LightningModule):
         accuracy = 0.0
         for x, y in results:
             loss += cross_entropy(x, y)
-            accuracy += multiclass_accuracy(x, y, num_classes=x.size(1))
+            accuracy += multiclass_accuracy(x, y, num_classes=x.size(1), average='micro')
     
         self.log_dict({"loss": loss, 'accuracy':accuracy / self.batch_size}, on_step=True, prog_bar=False, batch_size = self.batch_size )
         return {'loss': loss, 'x': x, 'y': y, }
@@ -48,22 +47,22 @@ class PeakMatchModel(pl.LightningModule):
         entropy_figs = []
         for idx, (x, y) in enumerate(results):
             loss += cross_entropy(x, y)
-            accuracy += multiclass_accuracy(x, y, num_classes=x.size(1))
-            # figs.append(gen_assignment_fig(batch[idx].res.cpu(), 
-            #                                batch[idx].hsqc.cpu(), 
-            #                                x.cpu(), 
-            #                                y.cpu(),
-            #                                )
-            #                             ) 
-            # entropy_figs.append(plot_entropy_hsqc(
-            #                                 batch[idx].res.cpu(),
-            #                                 x.cpu(),
+            accuracy += multiclass_accuracy(x, y, num_classes=x.size(1), average='micro')
+            figs.append(gen_assignment_fig(batch[idx].res.cpu(), 
+                                           batch[idx].hsqc.cpu(), 
+                                           x.cpu(), 
+                                           y.cpu(),
+                                           )
+                                        ) 
+            entropy_figs.append(plot_entropy_hsqc(
+                                            batch[idx].res.cpu(),
+                                            x.cpu(),
 
-            #                                 )
-            #                             )
+                                            )
+                                        )
         self.log_dict({"val_loss": loss, 'val_accuracy': accuracy / self.batch_size}, on_epoch=True, prog_bar=True, batch_size = self.batch_size)
-        # self.logger.experiment.add_figure('assign', figs)
-        # self.logger.experiment.add_figure('entropy', entropy_figs)
+        self.logger.experiment.add_figure('assign', figs)
+        self.logger.experiment.add_figure('entropy', entropy_figs)
         return loss, accuracy
 
     def configure_optimizers(self):
@@ -82,10 +81,4 @@ class PeakMatchModel(pl.LightningModule):
                 "name": None,
                 }
             }
-    
-    # def configure_optimizers(self):
-    #     gen_opt = optim.Adam(self.model.parameters(), lr=0.01)
-    #     dis_opt = optim.Adam(self.model.parameters(), lr=0.02)
-    #     dis_sch = optim.CosineAnnealing(dis_opt, T_max=10)
-    #     return [gen_opt, dis_opt], [dis_sch]
 
