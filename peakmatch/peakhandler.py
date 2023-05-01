@@ -404,6 +404,8 @@ class PeakHandler:
         edges_m = []
         edges_n = []
         for i in range(self.virtual_node_index):
+            edges_n.append(i)
+            edges_m.append(self.virtual_node_index)
             edges_m.append(i)
             edges_n.append(self.virtual_node_index)
         return torch.tensor([edges_m, edges_n], dtype=torch.long)
