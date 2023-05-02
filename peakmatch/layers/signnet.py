@@ -16,16 +16,13 @@ class MLP(nn.Module):
         hidden_channels,
         out_channels,
         num_layers,
-        use_bn=False,
         use_ln=True,
-        dropout=0.5,
+        dropout=0.0,
         activation="relu",
         residual=False,
     ):
         super().__init__()
         self.lins = nn.ModuleList()
-        if use_bn:
-            self.bns = nn.ModuleList()
         if use_ln:
             self.lns = nn.ModuleList()
 
@@ -34,14 +31,10 @@ class MLP(nn.Module):
             self.lins.append(nn.Linear(in_channels, out_channels))
         else:
             self.lins.append(nn.Linear(in_channels, hidden_channels))
-            if use_bn:
-                self.bns.append(nn.BatchNorm1d(hidden_channels))
             if use_ln:
                 self.lns.append(nn.LayerNorm(hidden_channels))
             for layer in range(num_layers - 2):
                 self.lins.append(nn.Linear(hidden_channels, hidden_channels))
-                if use_bn:
-                    self.bns.append(nn.BatchNorm1d(hidden_channels))
                 if use_ln:
                     self.lns.append(nn.LayerNorm(hidden_channels))
             self.lins.append(nn.Linear(hidden_channels, out_channels))
@@ -53,7 +46,6 @@ class MLP(nn.Module):
             self.activation = nn.Tanh()
         else:
             raise ValueError("Invalid activation")
-        self.use_bn = use_bn
         self.use_ln = use_ln
         self.dropout = dropout
         self.residual = residual
@@ -63,13 +55,6 @@ class MLP(nn.Module):
         for i, lin in enumerate(self.lins[:-1]):
             x = lin(x)
             x = self.activation(x)
-            if self.use_bn:
-                if x.ndim == 2:
-                    x = self.bns[i](x)
-                elif x.ndim == 3:
-                    x = self.bns[i](x.transpose(2, 1)).transpose(2, 1)
-                else:
-                    raise ValueError("invalid dimension of x")
             if self.use_ln:
                 x = self.lns[i](x)
             if self.residual and x_prev.shape == x.shape:
@@ -89,22 +74,22 @@ class GIN(nn.Module):
         hidden_channels,
         out_channels,
         n_layers,
-        use_bn=True,
-        dropout=0.5,
+        use_ln=True,
+        dropout=0.0,
         activation="relu",
     ):
         super().__init__()
         self.layers = nn.ModuleList()
-        if use_bn:
-            self.bns = nn.ModuleList()
-        self.use_bn = use_bn
+        if use_ln:
+            self.lns = nn.ModuleList()
+        self.use_ln = use_ln
         # input layer
         update_net = MLP(
             in_channels,
             hidden_channels,
             hidden_channels,
             2,
-            use_bn=use_bn,
+            use_ln=use_ln,
             dropout=dropout,
             activation=activation,
         )
@@ -116,39 +101,34 @@ class GIN(nn.Module):
                 hidden_channels,
                 hidden_channels,
                 2,
-                use_bn=use_bn,
+                use_bn=use_ln,
                 dropout=dropout,
                 activation=activation,
             )
             self.layers.append(GINConv(update_net))
-            if use_bn:
-                self.bns.append(nn.BatchNorm1d(hidden_channels))
+            if use_ln:
+                self.lns.append(nn.LayerNorm(hidden_channels))
         # output layer
         update_net = MLP(
             hidden_channels,
             hidden_channels,
             out_channels,
             2,
-            use_bn=use_bn,
+            use_ln=use_ln,
             dropout=dropout,
             activation=activation,
         )
         self.layers.append(GINConv(update_net))
-        if use_bn:
-            self.bns.append(nn.BatchNorm1d(hidden_channels))
+        if use_ln:
+            self.lns.append(nn.LayerNorm(hidden_channels))
         self.dropout = nn.Dropout(p=dropout)
 
     def forward(self, x, edge_index):
         for i, layer in enumerate(self.layers):
             if i != 0:
                 x = self.dropout(x)
-                if self.use_bn:
-                    if x.ndim == 2:
-                        x = self.bns[i - 1](x)
-                    elif x.ndim == 3:
-                        x = self.bns[i - 1](x.transpose(2, 1)).transpose(2, 1)
-                    else:
-                        raise ValueError("invalid x dim")
+                if self.use_ln:
+                    x = self.lns[i-1](x)
             x = layer(x, edge_index)
         return x
 
@@ -166,8 +146,8 @@ class MaskedGINDeepSigns(nn.Module):
         num_layers,
         dim_pe,
         rho_num_layers,
-        use_bn=False,
-        dropout=0.5,
+        use_ln=True,
+        dropout=0.0,
         activation="relu",
     ):
         super().__init__()
@@ -176,7 +156,7 @@ class MaskedGINDeepSigns(nn.Module):
             hidden_channels,
             out_channels,
             num_layers,
-            use_bn=use_bn,
+            use_ln=use_ln,
             dropout=dropout,
             activation=activation,
         )
@@ -185,7 +165,7 @@ class MaskedGINDeepSigns(nn.Module):
             hidden_channels,
             dim_pe,
             rho_num_layers,
-            use_bn=use_bn,
+            use_ln=use_ln,
             dropout=dropout,
             activation=activation,
         )
@@ -202,6 +182,7 @@ class MaskedGINDeepSigns(nn.Module):
     def forward(self, x, edge_index, batch_index):
         N = x.shape[0]  # Total number of nodes in the batch.
         K = x.shape[1]  # Max. number of eigen vectors / frequencies.
+
         x = x.transpose(0, 1)  # N x K x In -> K x N x In
         x = self.enc(x, edge_index) + self.enc(-x, edge_index)  # K x N x Out
         x = x.transpose(0, 1)  # K x N x Out -> N x K x Out
@@ -210,6 +191,7 @@ class MaskedGINDeepSigns(nn.Module):
         mask = torch.cat([torch.arange(K).unsqueeze(0) for _ in range(N)])
         mask = (mask.to(batch_index.device) < batched_num_nodes.unsqueeze(1)).bool()
         x[~mask] = 0
+
         x = x.sum(dim=1)  # (sum over K) -> N x Out
         x = self.rho(x)  # N x Out -> N x dim_pe
         return x

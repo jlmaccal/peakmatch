@@ -15,8 +15,9 @@ class InitalEmbedLayer(nn.Module):
         embed_dim=128,
         hidden_channels=64,
         out_channels=64,
-        num_layers=8,
-        rho_num_layers=3,
+        num_layers=2,
+        rho_num_layers=2,
+        use_ln=True,
     ):
         super().__init__()
 
@@ -25,6 +26,7 @@ class InitalEmbedLayer(nn.Module):
         self.tag_dim = tag_dim
         self.pos_enc_dim = pos_enc_dim
         self.embed_dim = embed_dim
+        self.use_ln = use_ln
 
         # Setup layers to embed nodes and edges
         self.embed_res = nn.Linear(
@@ -52,7 +54,7 @@ class InitalEmbedLayer(nn.Module):
             num_layers=num_layers,
             dim_pe=pos_enc_dim,
             rho_num_layers=rho_num_layers,
-            use_bn=False,
+            use_ln=self.use_ln,
             dropout=0.0,
             activation="relu",
         )

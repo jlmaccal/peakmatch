@@ -22,11 +22,6 @@ class ReadoutLayer(nn.Module):
                 "md,nd->mn", hsqc_embeddings, residue_embeddings
             )
             cross_attention = log_softmax(cross_attention, dim=1)
-           # y = y.reshape(m, n)
-            #labels = torch.softmax(cross_attention, dim=1)[:, 1].float()
-            #print(labels, y)
-            #output.append((labels, y))
             output.append((cross_attention, y))
-
 
         return output
