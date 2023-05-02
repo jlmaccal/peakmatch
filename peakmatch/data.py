@@ -17,6 +17,7 @@ class PeakMatchAugmentedDataset(torch.utils.data.IterableDataset):
         self,
         residues,
         predicted_contacts,
+        params: PeakNoiseAndMatchParams,
         min_hsqc_completeness=1.0,
         max_hsqc_noise=0.0,
         min_noe_completeness=1.0,
@@ -26,6 +27,7 @@ class PeakMatchAugmentedDataset(torch.utils.data.IterableDataset):
         self.num_residues = self.residues.size(0)
         self.predicted_contacts = predicted_contacts
         self.num_predicted_contacts = len(predicted_contacts)
+        self.params = params
         self.min_hsqc_completeness = min_hsqc_completeness
         self.max_hsqc_noise = max_hsqc_noise
         self.min_noe_completeness = min_noe_completeness
@@ -50,12 +52,10 @@ class PeakMatchAugmentedDataset(torch.utils.data.IterableDataset):
 
             res_d[residx] = resdata 
         
-        params = PeakNoiseAndMatchParams()
-
         peak_handler = generate_sample( 
                                         res_d, 
                                         contacts, 
-                                        params,
+                                        self.params,
                                         self.min_hsqc_completeness,
                                         self.max_hsqc_noise,
                                         self.min_noe_completeness,

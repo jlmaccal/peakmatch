@@ -2,7 +2,7 @@ import torch
 import pytorch_lightning as pl
 from peakmatch import data
 from peakmatch.layers import initembed, readout
-from peakmatch.model import PeakMatchModel
+from peakmatch.model import PeakMatchModel, ModelOptions
 from pytorch_lightning import loggers as pl_loggers
 from pytorch_lightning.callbacks import LearningRateMonitor
 
@@ -58,18 +58,22 @@ if __name__ == "__main__":
     e = []
 
     batch_size = 8
+    params = data.PeakNoiseAndMatchParams()
     dataset = data.PeakMatchAugmentedDataset(
                                             x, 
                                             e,
+                                            params,
                                             min_hsqc_completeness=1.0,
                                             max_hsqc_noise=0.0,
                                             min_noe_completeness=1.0,
                                             max_noe_noise=0.0,
                                             ) 
     
-    loader = data.PeakMatchDataLoader(dataset, batch_size=batch_size, )
+    loader = data.PeakMatchDataLoader(dataset, batch_size=batch_size)
     dm = data.PeakMatchDataModule(loader, batch_size=batch_size)
-    model = PeakMatchModel(batch_size=batch_size)
+
+    options = ModelOptions()
+    model = PeakMatchModel(options)
     tensorboard = pl_loggers.TensorBoardLogger(save_dir="")
     lr_monitor = LearningRateMonitor(logging_interval='step')
     trainer = pl.Trainer(limit_train_batches=100, logger=tensorboard, 

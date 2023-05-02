@@ -18,6 +18,7 @@ class InitalEmbedLayer(nn.Module):
         num_layers=2,
         rho_num_layers=2,
         use_ln=True,
+        dropout=0.0
     ):
         super().__init__()
 
@@ -55,7 +56,7 @@ class InitalEmbedLayer(nn.Module):
             dim_pe=pos_enc_dim,
             rho_num_layers=rho_num_layers,
             use_ln=self.use_ln,
-            dropout=0.0,
+            dropout=dropout,
             activation="relu",
         )
 

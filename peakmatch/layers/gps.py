@@ -15,7 +15,6 @@ class GPSLayer(nn.Module):
         num_heads,
         activation="relu",
         dropout=0.0,
-        attn_dropout=0.0,
         layer_norm=True,
     ):
         super().__init__()
@@ -24,7 +23,6 @@ class GPSLayer(nn.Module):
         self.num_heads = num_heads
         self.local_gnn_type = "gatedgcn"
         self.global_model_type = "graphgps"
-        self.attn_dropout = attn_dropout
         self.layer_norm = layer_norm
         if activation == "relu":
             self.activation = nn.ReLU
@@ -47,7 +45,7 @@ class GPSLayer(nn.Module):
 
         # global attention
         self.self_attn = torch.nn.MultiheadAttention(
-            dim_h, num_heads, dropout=self.attn_dropout, batch_first=True
+            dim_h, num_heads, dropout=dropout, batch_first=True
         )
 
         # Normalization for MPNN and Self-Attention representations.
