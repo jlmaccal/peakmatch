@@ -14,7 +14,6 @@ from dataclasses import dataclass
 
 @dataclass
 class ModelOptions:
-    res_dim: int = 3
     hsqc_dim: int = 3
     tag_dim: int = 32
     pos_enc_dim: int = 32
@@ -36,7 +35,6 @@ class PeakMatchModel(pl.LightningModule):
     def __init__(self, options: ModelOptions):
         super().__init__()
         self.init_embed = InitalEmbedLayer(
-            res_dim=options.res_dim,
             hsqc_dim=options.hsqc_dim,
             tag_dim=options.tag_dim,
             pos_enc_dim=options.pos_enc_dim,
@@ -59,6 +57,12 @@ class PeakMatchModel(pl.LightningModule):
                 )
             )
         self.readout = ReadoutLayer()
+
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        for layer in self.gps_layers:
+            layer.reset_parameters()
 
     def forward(self, batch):
         batch = self.init_embed(batch)
@@ -100,11 +104,6 @@ class PeakMatchModel(pl.LightningModule):
         loss = 0.0
         accuracy = 0.0
         for x, y in results:
-            print()
-            print()
-            print(x.detach())
-            print()
-            print()
             loss += cross_entropy(x, y)
             accuracy += multiclass_accuracy(
                 x, y, num_classes=x.size(1), average="micro"

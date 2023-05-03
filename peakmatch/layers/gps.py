@@ -64,6 +64,17 @@ class GPSLayer(nn.Module):
         self.ff_dropout1 = nn.Dropout(dropout)
         self.ff_dropout2 = nn.Dropout(dropout)
 
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        if self.local_model is not None:
+            self.local_model.reset_parameters()
+
+        torch.nn.init.kaiming_normal_(self.ff_linear1.weight, nonlinearity="relu")
+        torch.nn.init.zeros_(self.ff_linear1.bias)
+        torch.nn.init.kaiming_normal_(self.ff_linear2.weight, nonlinearity="relu")
+        torch.nn.init.zeros_(self.ff_linear2.bias)
+
     def forward(self, batch):
         h = batch.x
         h_in1 = h  # for first residual connection

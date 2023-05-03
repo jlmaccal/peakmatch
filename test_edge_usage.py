@@ -57,8 +57,8 @@ if __name__ == "__main__":
     # First edge array has no edges
     e = []
 
-    batch_size = 8
-    params = data.PeakNoiseAndMatchParams()
+    batch_size = 1
+    params = data.PeakNoiseAndMatchParams(noise_co=0.0, noise_h=0.0, noise_n=0.0)
     dataset = data.PeakMatchAugmentedDataset(
                                             x, 
                                             e,
@@ -72,7 +72,7 @@ if __name__ == "__main__":
     loader = data.PeakMatchDataLoader(dataset, batch_size=batch_size)
     dm = data.PeakMatchDataModule(loader, batch_size=batch_size)
 
-    options = ModelOptions()
+    options = ModelOptions(num_gps_layers=8, num_attn_heads=16)
     model = PeakMatchModel(options)
     tensorboard = pl_loggers.TensorBoardLogger(save_dir="")
     lr_monitor = LearningRateMonitor(logging_interval='step')

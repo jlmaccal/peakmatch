@@ -49,6 +49,12 @@ class MLP(nn.Module):
         self.use_ln = use_ln
         self.dropout = dropout
         self.residual = residual
+        self.reset_params()
+
+    def reset_params(self):
+        for layer in self.lins:
+            nn.init.kaiming_normal_(layer.weight, nonlinearity="relu")
+            nn.init.zeros_(layer.bias)
 
     def forward(self, x):
         x_prev = x
@@ -128,7 +134,7 @@ class GIN(nn.Module):
             if i != 0:
                 x = self.dropout(x)
                 if self.use_ln:
-                    x = self.lns[i-1](x)
+                    x = self.lns[i - 1](x)
             x = layer(x, edge_index)
         return x
 
@@ -192,6 +198,6 @@ class MaskedGINDeepSigns(nn.Module):
         mask = (mask.to(batch_index.device) < batched_num_nodes.unsqueeze(1)).bool()
         x[~mask] = 0
 
-        x = x.sum(dim=1)  # (sum over K) -> N x Out
+        x = x.mean(dim=1)  # (sum over K) -> N x Out
         x = self.rho(x)  # N x Out -> N x dim_pe
         return x
