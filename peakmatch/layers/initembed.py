@@ -6,6 +6,7 @@ import torch
 
 torch.set_printoptions(sci_mode=False)
 
+
 class InitalEmbedLayer(nn.Module):
     def __init__(
         self,
@@ -18,7 +19,7 @@ class InitalEmbedLayer(nn.Module):
         num_layers=2,
         rho_num_layers=2,
         use_ln=True,
-        dropout=0.0
+        dropout=0.0,
     ):
         super().__init__()
 
@@ -84,9 +85,7 @@ class InitalEmbedLayer(nn.Module):
 
             virtual_x = self.virtual_tag
 
-            res_edge_x = self.res_edge_tag.expand(
-                data.contact_edges.size(1), -1
-            )
+            res_edge_x = self.res_edge_tag.expand(data.contact_edges.size(1), -1)
             noe_edge_x = self.noe_edge_tag.expand(data.noe_edges.size(1), -1)
             virtual_edge_x = self.virtual_edge_tag.expand(
                 data.virtual_edges.size(1), -1

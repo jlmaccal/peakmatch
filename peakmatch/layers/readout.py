@@ -20,9 +20,9 @@ class ReadoutLayer(nn.Module):
             residue_embeddings = x[:n, :]
             hsqc_embeddings = x[n : (n + m), :]
             cross_attention = torch.einsum(
-                "md,nd->mn", hsqc_embeddings, residue_embeddings
+                "md,dn->mn", hsqc_embeddings, residue_embeddings.transpose(0, 1)
             ) / math.sqrt(x.size(1))
-            # cross_attention = log_softmax(cross_attention, dim=1)
+            cross_attention = log_softmax(cross_attention, dim=1)
             output.append((cross_attention, y))
 
         return output

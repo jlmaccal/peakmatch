@@ -4,7 +4,6 @@ from torch_geometric.utils import to_undirected, to_scipy_sparse_matrix
 from torch_geometric.utils import get_laplacian as pyg_get_laplacian
 import numpy as np
 
-
 def get_laplacian(
     edge_index, num_nodes, laplace_norm_type=None, eigvec_norm_type="L2", max_freqs=16
 ):
@@ -19,7 +18,6 @@ def get_laplacian(
     vals, vecs = get_lap_decomp_stats(
         evals=vals, evects=vecs, max_freqs=max_freqs, eigvec_norm=eigvec_norm_type
     )
-
     return vecs, vals
 
 

@@ -72,7 +72,8 @@ if __name__ == "__main__":
     loader = data.PeakMatchDataLoader(dataset, batch_size=batch_size)
     dm = data.PeakMatchDataModule(loader, batch_size=batch_size)
 
-    options = ModelOptions(num_gps_layers=8, num_attn_heads=16)
+    # options = ModelOptions(dropout=0.0, tag_dim=4, pos_enc_dim=4, embed_dim=16, pos_enc_num_layers=2)
+    options = ModelOptions(dropout=0.0)
     model = PeakMatchModel(options)
     tensorboard = pl_loggers.TensorBoardLogger(save_dir="")
     lr_monitor = LearningRateMonitor(logging_interval='step')

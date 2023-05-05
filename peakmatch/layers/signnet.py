@@ -54,7 +54,6 @@ class MLP(nn.Module):
     def reset_params(self):
         for layer in self.lins:
             nn.init.kaiming_normal_(layer.weight, nonlinearity="relu")
-            nn.init.zeros_(layer.bias)
 
     def forward(self, x):
         x_prev = x
@@ -107,7 +106,7 @@ class GIN(nn.Module):
                 hidden_channels,
                 hidden_channels,
                 2,
-                use_bn=use_ln,
+                use_ln=use_ln,
                 dropout=dropout,
                 activation=activation,
             )
@@ -175,6 +174,7 @@ class MaskedGINDeepSigns(nn.Module):
             dropout=dropout,
             activation=activation,
         )
+        self.layer_norm = nn.LayerNorm(16)
 
     def batched_n_nodes(self, batch_index):
         batch_size = batch_index.max().item() + 1
@@ -189,6 +189,10 @@ class MaskedGINDeepSigns(nn.Module):
         N = x.shape[0]  # Total number of nodes in the batch.
         K = x.shape[1]  # Max. number of eigen vectors / frequencies.
 
+        # Apply layer norm to ensure that the eigenvector components for
+        # each node are standardized.
+        x = self.layer_norm(x.squeeze(-1)).unsqueeze(-1)
+
         x = x.transpose(0, 1)  # N x K x In -> K x N x In
         x = self.enc(x, edge_index) + self.enc(-x, edge_index)  # K x N x Out
         x = x.transpose(0, 1)  # K x N x Out -> N x K x Out
@@ -198,6 +202,6 @@ class MaskedGINDeepSigns(nn.Module):
         mask = (mask.to(batch_index.device) < batched_num_nodes.unsqueeze(1)).bool()
         x[~mask] = 0
 
-        x = x.mean(dim=1)  # (sum over K) -> N x Out
+        x = x.sum(dim=1)  # (sum over K) -> N x Out
         x = self.rho(x)  # N x Out -> N x dim_pe
         return x

@@ -54,11 +54,6 @@ class GatedGCNLayer(pyg_nn.conv.MessagePassing):
         torch.nn.init.kaiming_normal_(self.C.weight, nonlinearity="relu")
         torch.nn.init.kaiming_normal_(self.D.weight, nonlinearity="relu")
         torch.nn.init.kaiming_normal_(self.E.weight, nonlinearity="relu")
-        torch.nn.init.zeros_(self.A.bias)
-        torch.nn.init.zeros_(self.B.bias)
-        torch.nn.init.zeros_(self.C.bias)
-        torch.nn.init.zeros_(self.D.bias)
-        torch.nn.init.zeros_(self.E.bias)
 
     def forward(self, batch):
         x = batch.x  # n_nodes x d
