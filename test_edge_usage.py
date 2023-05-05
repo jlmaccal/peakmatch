@@ -52,13 +52,20 @@ if __name__ == "__main__":
     # x = np.vstack((n_shifts, h_shifts, co_shifts))
     # x = torch.tensor(x).float().T
     # print(x)
-    x = torch.zeros((3,3))
+    x = torch.tensor(
+        [
+            [-1.0, -1.0, 0.0],
+            [-1.05, 1.05, 0.0],
+            [-0.95, 0.95, 0.0],
+            [1.0, 1.0, 0.0],
+        ]
+    )
 
     # First edge array has no edges
-    e = []
+    e = [(0, 1)]
 
-    batch_size = 1
-    params = data.PeakNoiseAndMatchParams(noise_co=0.0, noise_h=0.0, noise_n=0.0)
+    batch_size = 32
+    params = data.PeakNoiseAndMatchParams()
     dataset = data.PeakMatchAugmentedDataset(
                                             x, 
                                             e,
