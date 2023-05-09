@@ -20,18 +20,16 @@ class PeakNoiseAndMatchParams:
     noise_n: float = 2.61 / (nrange[1] - nrange[0])  # noise added in n dimension
     noise_co: float = 1.14 / (corange[1] - corange[0])  # noise added in co dimension
 
-    # noise_h: float = 0.0 / (hrange[1] - hrange[0])  # noise added in h dimension
-    # noise_n: float = 0.0 / (nrange[1] - nrange[0])  # noise added in n dimension
-    # noise_co: float = 0.0 / (corange[1] - corange[0])  # noise added in co dimension
-
-    # noise_h: float = 0.0
-    # noise_n: float = 0.0
-    # noise_co: float = 0.0
-
     noise_peak_factor: float = 3.0  # scale up noise added for extra peaks
-    threshold_h1: float = 0.05 / (hrange[1] - hrange[0])  # tolerance for matching in h1 dimension
-    threshold_n1: float = 0.50 / (nrange[1] - nrange[0])  # tolerance for matching in n1 dimension
-    threshold_h2: float = 0.50 / (corange[1] - corange[0])   # tolerance for matching in h2 dimension
+    threshold_h1: float = 0.05 / (
+        hrange[1] - hrange[0]
+    )  # tolerance for matching in h1 dimension
+    threshold_n1: float = 0.50 / (
+        nrange[1] - nrange[0]
+    )  # tolerance for matching in n1 dimension
+    threshold_h2: float = 0.50 / (
+        corange[1] - corange[0]
+    )  # tolerance for matching in h2 dimension
 
 
 def generate_sample(
@@ -363,20 +361,20 @@ class PeakHandler:
             source_index1 = random.randrange(0, self.n_pred_hsqc)
             source_index2 = random.randrange(0, self.n_pred_hsqc)
 
-            source1 = self.fake_hsqc[source_index1, :]
-            source2 = self.fake_hsqc[source_index2, :]
+            source1 = self.pred_hsqc[source_index1, :]
+            source2 = self.pred_hsqc[source_index2, :]
 
             # sample new peaks from a normal distribution
             noise_peak1 = torch.normal(
                 source1,
                 self.noise_peak_factor
                 * torch.tensor([self._noise_h, self._noise_n, self._noise_co]),
-            ).unsqueeze(0)
+            )
             noise_peak2 = torch.normal(
                 source2,
                 self.noise_peak_factor
                 * torch.tensor([self._noise_h, self._noise_n, self._noise_co]),
-            ).unsqueeze(0)
+            )
 
             shift_h1 = noise_peak1[0]
             shift_n1 = noise_peak1[1]
@@ -415,7 +413,8 @@ class PeakHandler:
             return random.sample(
                 # peaks to remove should correspond to real predicted hsqc and not added
                 # therefoer use self.n_pred_hsqc and not self.n_fake_hsqc, which includes noisified and spurious peaks
-                range(0, self.n_pred_hsqc), k=self._hsqc_peaks_to_drop
+                range(0, self.n_pred_hsqc),
+                k=self._hsqc_peaks_to_drop,
             )
         else:
             return []

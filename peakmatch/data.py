@@ -6,11 +6,13 @@ from .peakhandler import ResidueData
 from .peakhandler import PeakNoiseAndMatchParams
 from .peakhandler import generate_sample
 import pytorch_lightning as pl
+import random
 
 PeakData = namedtuple(
     "PeakData",
     "res hsqc contact_edges noe_edges virtual_edges edge_index eig_vecs eig_vals num_nodes y",
 )
+
 
 class PeakMatchAugmentedDataset(torch.utils.data.IterableDataset):
     def __init__(
@@ -33,7 +35,6 @@ class PeakMatchAugmentedDataset(torch.utils.data.IterableDataset):
         self.min_noe_completeness = min_noe_completeness
         self.max_noe_noise = max_noe_noise
 
-
     def __iter__(self):
         return self
 
@@ -43,26 +44,28 @@ class PeakMatchAugmentedDataset(torch.utils.data.IterableDataset):
 
         res_d = {}
         for residx, shifts in enumerate(residues):
-            
             resdata = ResidueData(
-                shift_h = shifts[0],
-                shift_n = shifts[1],
-                shift_co = shifts[2],
+                shift_h=shifts[0],
+                shift_n=shifts[1],
+                shift_co=shifts[2],
             )
 
-            res_d[residx] = resdata 
-        
-        peak_handler = generate_sample( 
-                                        res_d, 
-                                        contacts, 
-                                        self.params,
-                                        self.min_hsqc_completeness,
-                                        self.max_hsqc_noise,
-                                        self.min_noe_completeness,
-                                        self.max_noe_noise,
-                                       )
+            res_d[residx] = resdata
 
-        edge_index = torch.cat([peak_handler.pred_noe, peak_handler.fake_noe, peak_handler.virtual_edges], dim=1)
+        peak_handler = generate_sample(
+            res_d,
+            contacts,
+            self.params,
+            self.min_hsqc_completeness,
+            self.max_hsqc_noise,
+            self.min_noe_completeness,
+            self.max_noe_noise,
+        )
+
+        edge_index = torch.cat(
+            [peak_handler.pred_noe, peak_handler.fake_noe, peak_handler.virtual_edges],
+            dim=1,
+        )
         num_nodes = peak_handler.n_nodes
         eig_vecs, eig_vals = get_laplacian(edge_index, num_nodes)
 
@@ -78,6 +81,21 @@ class PeakMatchAugmentedDataset(torch.utils.data.IterableDataset):
             num_nodes=num_nodes,
             y=peak_handler.correspondence,
         )
+
+
+class CombinedPeakMatchAugmentedDataset(PeakMatchAugmentedDataset):
+    def __init__(
+        self,
+        datasets,
+    ):
+        self.datasets = datasets
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        dataset = random.choice(self.datasets)
+        return dataset.__next__()
 
 
 class PeakMatchDataLoader(torch.utils.data.DataLoader):
@@ -119,6 +137,7 @@ class PeakMatchDataLoader(torch.utils.data.DataLoader):
             pin_memory_device=pin_memory_device,
         )
 
+
 class PeakMatchDataModule(pl.LightningDataModule):
     def __init__(self, loader: PeakMatchDataLoader, batch_size: int = 32):
         super().__init__()
@@ -127,7 +146,7 @@ class PeakMatchDataModule(pl.LightningDataModule):
 
     def setup(self, stage: str):
         self.peak_val = next(iter(self.loader))
-        #self.peak_val = self.loader
+        # self.peak_val = self.loader
 
     def train_dataloader(self):
         return self.loader

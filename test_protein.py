@@ -93,12 +93,12 @@ if __name__ == "__main__":
     x = torch.tensor(x).float()
     # x = torch.randn(x.shape[0], 3).float()
 
-    # e = gen_contacts("1em7_protein_G_H.pdb")
-    # print(e)
+    e = gen_contacts("1em7_protein_G_H.pdb")
+    print(e)
 
-    e = []
-    for i in range(25):
-        e.append((i, i + 1))
+    # e = []
+    # for i in range(25):
+    #     e.append((i, i + 1))
 
     batch_size = 32
     params = data.PeakNoiseAndMatchParams()
@@ -106,8 +106,8 @@ if __name__ == "__main__":
         x,
         e,
         params,
-        min_hsqc_completeness=0.7,
-        max_hsqc_noise=0.3,
+        min_hsqc_completeness=0.8,
+        max_hsqc_noise=0.1,
         min_noe_completeness=0.3,
         max_noe_noise=0.2,
     )
