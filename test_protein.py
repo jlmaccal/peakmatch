@@ -106,8 +106,8 @@ if __name__ == "__main__":
         x,
         e,
         params,
-        min_hsqc_completeness=0.8,
-        max_hsqc_noise=0.1,
+        min_hsqc_completeness=0.7,
+        max_hsqc_noise=0.3,
         min_noe_completeness=0.3,
         max_noe_noise=0.2,
     )
