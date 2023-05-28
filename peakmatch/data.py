@@ -69,10 +69,18 @@ class PeakMatchAugmentedDataset(torch.utils.data.IterableDataset):
         num_nodes = peak_handler.n_nodes
         eig_vecs, eig_vals = get_laplacian(edge_index, num_nodes)
 
+        if contacts:
+            contacts = torch.tensor(contacts)
+            contacts = to_undirected(
+                [contacts[:, 0], contacts[:, 1]],
+            )
+        else:
+            contacts = torch.empty((2, 0), dtype=torch.long)
+
         return PeakData(
             res=peak_handler.pred_hsqc,
             hsqc=peak_handler.fake_hsqc,
-            contact_edges=peak_handler.pred_noe,
+            contact_edges=contacts,
             noe_edges=peak_handler.fake_noe,
             virtual_edges=peak_handler.virtual_edges,
             edge_index=edge_index,

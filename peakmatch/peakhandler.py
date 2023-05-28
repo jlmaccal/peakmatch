@@ -264,6 +264,9 @@ class PeakHandler:
         return torch.tensor(correspondence, dtype=torch.long)
 
     def _compute_pred_hsqc(self, residues):
+        # Compute the predicted hsqc. This is just re-indexing things
+        # to be sequential and adding dummy residues. There is nothing
+        # stochastic in this function.
         pred_hsqc = []
         for key in residues.keys():
             residue = residues[key]
@@ -273,36 +276,34 @@ class PeakHandler:
         return torch.tensor(pred_hsqc)
 
     def _compute_pred_noe(self, contacts):
+        # Compute the expected noes between the predicted hsqc peaks
+        # for the given contacts. There is nothing stochastic in this
+        # function.
         e1 = []
         e2 = []
         for i, j in contacts:
-            # Handle case where a we have a close contact but there is no
-            # predicted hsqc peak for one of the residues.
-            if (
-                i not in self.residue_to_fake_hsqc_mapping
-                or j not in self.residue_to_fake_hsqc_mapping
-            ):
-                continue
-            # Handle the case where one of the hsqc peaks was dropped.
-            if (
-                self.residue_to_fake_hsqc_mapping[i] is None
-                or self.residue_to_fake_hsqc_mapping[j] is None
-            ):
-                continue
-            e1.append(self.residue_to_fake_hsqc_mapping[i])
-            e2.append(self.residue_to_fake_hsqc_mapping[j])
-            e1.append(self.residue_to_fake_hsqc_mapping[j])
-            e2.append(self.residue_to_fake_hsqc_mapping[i])
+            e1.append(self.residue_to_pred_hsqc_mapping[i])
+            e2.append(self.residue_to_pred_hsqc_mapping[j])
+            e1.append(self.residue_to_pred_hsqc_mapping[j])
+            e2.append(self.residue_to_pred_hsqc_mapping[i])
 
         return torch.tensor([e1, e2], dtype=torch.long)
 
     def _compute_fake_hsqc(self):
+        # Generate the fake hsqc. There are two sources of randomness
+        # in this function. First, we add noise to the predicted
+        # hsqc peaks. Second, we add extra peaks. The extra peaks
+        # come from fake_hsqc_to_residue_mapping.
         fake_hsqcs = []
         # Loop over all of the peaks
         for peak in self.fake_hsqc_to_residue_mapping.keys():
             residue = self.fake_hsqc_to_residue_mapping[peak]
+
+            # There are two cases. If this peak does not correspond
+            # to a real residue, we sample a random noise peak.
             if residue is None:
                 fake_hsqc = self._sample_noise_peak()
+            # Otherwise, we add noise to the corresponding real peak.
             else:
                 pred_peak = self.residue_to_pred_hsqc_mapping[residue]
                 means = self.pred_hsqc[pred_peak, :].unsqueeze(0)
@@ -326,32 +327,60 @@ class PeakHandler:
         return noise_peak
 
     def _compute_fake_noe(self):
+        # Generate the fake noes. There are two sources of randomness
+        # in this function. First, we drop some of the predicted noes.
+        # Second, we add extra noes.
         fake_noe_edges = []
+
+        # First we find the chemical shifts for all of the expected noes.
+        shifts = []
         for i, j in self.pred_noe.t():
+            # Map from the predicted hsqc peak to the fake hsqc peak.
+            i = i.item()
+            i = self.residue_to_fake_hsqc_mapping[self.pred_hsqc_to_residue_mapping[i]]
+            j = j.item()
+            j = self.residue_to_fake_hsqc_mapping[self.pred_hsqc_to_residue_mapping[j]]
+
+            # If either of the peaks are missing from the fake hsqc, we skip
+            # this noe.
+            if i is None or j is None:
+                continue
+
+            # Gather the chemical shifts for the two peaks.
             shift_h1 = self.fake_hsqc[i, 0]
             shift_n1 = self.fake_hsqc[i, 1]
             shift_h2 = self.fake_hsqc[j, 0]
-            matches = _compute_noe_matches(
-                self.fake_hsqc,
-                shift_h1,
-                shift_n1,
-                shift_h2,
-                self._threshold_h1,
-                self._threshold_n1,
-                self._threshold_h2,
-            )
-            fake_noe_edges.append(matches)
+            shifts.append((shift_h1, shift_n1, shift_h2))
 
+        # Now we randomly select a subset of the shifts to keep.
+        if shifts:
+            shifts = torch.tensor(shifts)
+            n_shifts = shifts.shape[0]
+            indices_to_keep = sorted(
+                random.sample(list(range(n_shifts)), n_shifts - self.noes_to_drop)
+            )
+            shifts_to_keep = shifts[indices_to_keep, :]
+
+            # Now we compute the matches for all of the expected noes.
+            for shift_h1, shift_n1, shift_h2 in shifts_to_keep:
+                matches = _compute_noe_matches(
+                    self.fake_hsqc,
+                    shift_h1,
+                    shift_n1,
+                    shift_h2,
+                    self._threshold_h1,
+                    self._threshold_n1,
+                    self._threshold_h2,
+                )
+                fake_noe_edges.append(matches)
+        else:
+            fake_noe_edges = []
+
+        # Turn it into a tensor.
         if not fake_noe_edges:
             edges_to_keep = torch.tensor([[], []], dtype=torch.long)
         else:
-            fake_noe_edges = torch.cat(fake_noe_edges, dim=1) + self.fake_hsqc_offset
-            n_noes = fake_noe_edges.shape[1]
-            indices_to_keep = sorted(
-                random.sample(list(range(n_noes)), n_noes - self.noes_to_drop)
-            )
-
-            edges_to_keep = fake_noe_edges[:, indices_to_keep]
+            edges_to_keep = torch.cat(fake_noe_edges, dim=1) + self.fake_hsqc_offset
 
         # Add the extra noes by choosing random pairs of peaks
         # and addition noise
