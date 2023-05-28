@@ -103,14 +103,28 @@ class PeakMatchModel(pl.LightningModule):
         results = self.forward(batch)
         loss = 0.0
         accuracy = 0.0
-        for x, y in results:
+        figs = []
+
+        for idx, (x, y) in enumerate(results):
             loss += cross_entropy(x, y)
             accuracy += multiclass_accuracy(
                 x, y, num_classes=x.size(1), average="micro"
             )
 
+            if idx == 0:
+                figs.append(
+                    gen_assignment_fig(
+                        batch[idx].res.cpu(),
+                        batch[idx].hsqc.cpu(),
+                        x.cpu(),
+                        y.cpu(),
+                    )
+                )
+
         loss = loss / batch_size
         accuracy = accuracy / batch_size
+
+        self.logger.experiment.add_figure('assign', figs, global_step=self.global_step)
 
         self.log_dict(
             {"val_loss": loss, "val_accuracy": accuracy},
@@ -127,25 +141,12 @@ class PeakMatchModel(pl.LightningModule):
         results = self.forward(batch)
         loss = 0.0
         accuracy = 0.0
-        figs = []
         # entropy_figs = []
         for idx, (x, y) in enumerate(results):
             loss += cross_entropy(x, y)
             accuracy += multiclass_accuracy(
                 x, y, num_classes=x.size(1), average="micro"
             )
-        #     figs.append(gen_assignment_fig(batch[idx].res.cpu(),
-        #                                    batch[idx].hsqc.cpu(),
-        #                                    x.cpu(),
-        #                                    y.cpu(),
-        #                                    )
-        #                                 )
-        #     entropy_figs.append(plot_entropy_hsqc(
-        #                                     batch[idx].res.cpu(),
-        #                                     x.cpu(),
-
-        #                                     )
-        #                                 )
         self.log_dict(
             {"val_loss": loss, "val_accuracy": accuracy / self.batch_size},
             on_epoch=True,
