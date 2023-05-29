@@ -2,6 +2,11 @@ import torch
 from .laplacian import get_laplacian
 from torch_geometric.utils import to_undirected
 from collections import namedtuple
+from .peakhandler import ResidueData
+from .peakhandler import PeakNoiseAndMatchParams
+from .peakhandler import generate_sample
+import pytorch_lightning as pl
+import random
 
 PeakData = namedtuple(
     "PeakData",
@@ -10,91 +15,102 @@ PeakData = namedtuple(
 
 
 class PeakMatchAugmentedDataset(torch.utils.data.IterableDataset):
-    def __init__(self, residues, predicted_contacts):
+    def __init__(
+        self,
+        residues,
+        predicted_contacts,
+        params: PeakNoiseAndMatchParams,
+        min_hsqc_completeness=1.0,
+        max_hsqc_noise=0.0,
+        min_noe_completeness=1.0,
+        max_noe_noise=0.0,
+    ):
         self.residues = residues
         self.num_residues = self.residues.size(0)
-        self.predicted_contacts = to_undirected(predicted_contacts, self.num_residues)
-        self.num_predicted_contacts = self.predicted_contacts.size(1)
+        self.predicted_contacts = predicted_contacts
+        self.num_predicted_contacts = len(predicted_contacts)
+        self.params = params
+        self.min_hsqc_completeness = min_hsqc_completeness
+        self.max_hsqc_noise = max_hsqc_noise
+        self.min_noe_completeness = min_noe_completeness
+        self.max_noe_noise = max_noe_noise
 
     def __iter__(self):
         return self
 
     def __next__(self):
         residues = self.residues.clone()
-        contacts = self.predicted_contacts.clone()
+        contacts = self.predicted_contacts.copy()
 
-        fake_hsqc = torch.normal(mean=residues, std=0.2)
-        num_fake_hsqc = fake_hsqc.size(0)
+        res_d = {}
+        for residx, shifts in enumerate(residues):
+            resdata = ResidueData(
+                shift_h=shifts[0],
+                shift_n=shifts[1],
+                shift_co=shifts[2],
+            )
 
-        noe_edges = _gen_fake_noe(fake_hsqc, contacts, self.num_residues)
+            res_d[residx] = resdata
 
-        virtual_edges = _gen_virtual_edges(self.num_residues + num_fake_hsqc)
+        peak_handler = generate_sample(
+            res_d,
+            contacts,
+            self.params,
+            self.min_hsqc_completeness,
+            self.max_hsqc_noise,
+            self.min_noe_completeness,
+            self.max_noe_noise,
+        )
 
-        edge_index = torch.cat([contacts, noe_edges, virtual_edges], dim=1)
-
-        num_nodes = self.num_residues + num_fake_hsqc + 1
-
+        edge_index = torch.cat(
+            [peak_handler.pred_noe, peak_handler.fake_noe, peak_handler.virtual_edges],
+            dim=1,
+        )
+        num_nodes = peak_handler.n_nodes
         eig_vecs, eig_vals = get_laplacian(edge_index, num_nodes)
 
-        # This will need to be changed when we allow for num_residues != num_fake_hsqc
-        assert self.num_residues == num_fake_hsqc
-        y = torch.eye(self.num_residues).flatten()
+        if contacts:
+            contacts = torch.tensor(contacts)
+            contacts = to_undirected(
+                [contacts[:, 0], contacts[:, 1]],
+            )
+        else:
+            contacts = torch.empty((2, 0), dtype=torch.long)
 
         return PeakData(
-            res=residues,
-            hsqc=fake_hsqc,
+            res=peak_handler.pred_hsqc,
+            hsqc=peak_handler.fake_hsqc,
             contact_edges=contacts,
-            noe_edges=noe_edges,
-            virtual_edges=virtual_edges,
+            noe_edges=peak_handler.fake_noe,
+            virtual_edges=peak_handler.virtual_edges,
             edge_index=edge_index,
             eig_vecs=eig_vecs,
             eig_vals=eig_vals,
             num_nodes=num_nodes,
-            y=y,
+            y=peak_handler.correspondence,
         )
 
 
-def _gen_fake_noe(fake_hsqc, contacts, base_index):
-    edges_m = []
-    edges_n = []
+class CombinedPeakMatchAugmentedDataset(PeakMatchAugmentedDataset):
+    def __init__(
+        self,
+        datasets,
+    ):
+        self.datasets = datasets
 
-    for i, j in zip(contacts[0, :], contacts[1, :]):
-        n1 = fake_hsqc[i, 0]
-        h1 = fake_hsqc[i, 1]
-        h2 = fake_hsqc[j, 1]
-        possible1 = torch.argwhere(
-            torch.logical_and(
-                (torch.abs(fake_hsqc[:, 0] - n1) < 0.05),
-                (torch.abs(fake_hsqc[:, 1] - h1) < 0.05),
-            )
-        )
-        possible2 = torch.argwhere(torch.abs(fake_hsqc[:, 1] - h2) < 0.05)
-        for m in possible1:
-            for n in possible2:
-                edges_m.append(m + base_index)
-                edges_n.append(n + base_index)
+    def __iter__(self):
+        return self
 
-    return torch.tensor([edges_m, edges_n], dtype=torch.long)
-
-
-def _gen_virtual_edges(num_nodes):
-    edges1 = []
-    edges2 = []
-    # the virtual node will be at index num_nodes
-    for i in range(num_nodes):
-        edges1.append(i)
-        edges2.append(num_nodes)
-        edges1.append(num_nodes)
-        edges2.append(i)
-
-    return torch.tensor([edges1, edges2])
+    def __next__(self):
+        dataset = random.choice(self.datasets)
+        return dataset.__next__()
 
 
 class PeakMatchDataLoader(torch.utils.data.DataLoader):
     def __init__(
         self,
         dataset,
-        batch_size=1,
+        batch_size=32,
         shuffle=None,
         sampler=None,
         batch_sampler=None,
@@ -108,7 +124,7 @@ class PeakMatchDataLoader(torch.utils.data.DataLoader):
         *,
         prefetch_factor=2,
         persistent_workers=False,
-        pin_memory_device=""
+        pin_memory_device="",
     ):
         super().__init__(
             dataset,
@@ -128,3 +144,26 @@ class PeakMatchDataLoader(torch.utils.data.DataLoader):
             persistent_workers=persistent_workers,
             pin_memory_device=pin_memory_device,
         )
+
+
+class PeakMatchDataModule(pl.LightningDataModule):
+    def __init__(self, loader: PeakMatchDataLoader, batch_size: int = 32):
+        super().__init__()
+        self.loader = loader
+        self.batch_size = batch_size
+
+    def setup(self, stage: str):
+        self.peak_val = next(iter(self.loader))
+        # self.peak_val = self.loader
+
+    def train_dataloader(self):
+        return self.loader
+
+    def val_dataloader(self):
+        return PeakMatchDataLoader(self.peak_val, batch_size=self.batch_size)
+
+    def test_dataloader(self):
+        pass
+
+    def predict_dataloader(self):
+        pass

@@ -2,6 +2,7 @@ import torch.nn as nn
 from torch_geometric.utils import unbatch
 from torch.nn.functional import log_softmax
 import torch
+import math
 
 
 class ReadoutLayer(nn.Module):
@@ -19,10 +20,9 @@ class ReadoutLayer(nn.Module):
             residue_embeddings = x[:n, :]
             hsqc_embeddings = x[n : (n + m), :]
             cross_attention = torch.einsum(
-                "nd,md->nm", residue_embeddings, hsqc_embeddings
-            )
+                "md,dn->mn", hsqc_embeddings, residue_embeddings.transpose(0, 1)
+            ) / math.sqrt(x.size(1))
             cross_attention = log_softmax(cross_attention, dim=1)
-            y = y.reshape(n, m)
             output.append((cross_attention, y))
 
         return output

@@ -15,17 +15,15 @@ class GPSLayer(nn.Module):
         num_heads,
         activation="relu",
         dropout=0.0,
-        attn_dropout=0.0,
-        layer_norm=False,
-        batch_norm=True,
+        layer_norm=True,
     ):
         super().__init__()
 
         self.dim_h = dim_h
         self.num_heads = num_heads
-        self.attn_dropout = attn_dropout
+        self.local_gnn_type = "gatedgcn"
+        self.global_model_type = "graphgps"
         self.layer_norm = layer_norm
-        self.batch_norm = batch_norm
         if activation == "relu":
             self.activation = nn.ReLU
         elif activation == "elu":
@@ -37,24 +35,23 @@ class GPSLayer(nn.Module):
 
         # Local message-passing model.
         self.local_model = GatedGCNLayer(
-            dim_h, dim_h, dropout=dropout, residual=True, act=activation
+            dim_h,
+            dim_h,
+            dropout=dropout,
+            residual=True,
+            act=activation,
+            use_ln=self.layer_norm,
         )
 
         # global attention
         self.self_attn = torch.nn.MultiheadAttention(
-            dim_h, num_heads, dropout=self.attn_dropout, batch_first=True
+            dim_h, num_heads, dropout=dropout, batch_first=True
         )
-
-        if self.layer_norm and self.batch_norm:
-            raise ValueError("Cannot apply two types of normalization together")
 
         # Normalization for MPNN and Self-Attention representations.
         if self.layer_norm:
             self.norm1_local = pygnn.norm.LayerNorm(dim_h)
             self.norm1_attn = pygnn.norm.LayerNorm(dim_h)
-        if self.batch_norm:
-            self.norm1_local = nn.BatchNorm1d(dim_h)
-            self.norm1_attn = nn.BatchNorm1d(dim_h)
         self.dropout_local = nn.Dropout(dropout)
         self.dropout_attn = nn.Dropout(dropout)
 
@@ -64,10 +61,17 @@ class GPSLayer(nn.Module):
         self.act_fn_ff = self.activation()
         if self.layer_norm:
             self.norm2 = pygnn.norm.LayerNorm(dim_h)
-        if self.batch_norm:
-            self.norm2 = nn.BatchNorm1d(dim_h)
         self.ff_dropout1 = nn.Dropout(dropout)
         self.ff_dropout2 = nn.Dropout(dropout)
+
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        if self.local_model is not None:
+            self.local_model.reset_parameters()
+
+        torch.nn.init.kaiming_normal_(self.ff_linear1.weight, nonlinearity="relu")
+        torch.nn.init.kaiming_normal_(self.ff_linear2.weight, nonlinearity="relu")
 
     def forward(self, batch):
         h = batch.x
@@ -91,8 +95,6 @@ class GPSLayer(nn.Module):
             batch.edge_attr = local_out.edge_attr
             if self.layer_norm:
                 h_local = self.norm1_local(h_local, batch.batch)
-            if self.batch_norm:
-                h_local = self.norm1_local(h_local)
             h_out_list.append(h_local)
 
         # Multi-head attention.
@@ -104,8 +106,6 @@ class GPSLayer(nn.Module):
             h_attn = h_in1 + h_attn  # Residual connection.
             if self.layer_norm:
                 h_attn = self.norm1_attn(h_attn, batch.batch)
-            if self.batch_norm:
-                h_attn = self.norm1_attn(h_attn)
             h_out_list.append(h_attn)
 
         # Combine local and global outputs.
@@ -116,8 +116,6 @@ class GPSLayer(nn.Module):
         h = h + self._ff_block(h)
         if self.layer_norm:
             h = self.norm2(h, batch.batch)
-        if self.batch_norm:
-            h = self.norm2(h)
 
         batch.x = h
         return batch

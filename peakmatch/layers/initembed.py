@@ -4,45 +4,45 @@ from torch_geometric.utils import unbatch
 from torch_geometric.data import Data, Batch
 import torch
 
+torch.set_printoptions(sci_mode=False)
+
 
 class InitalEmbedLayer(nn.Module):
     def __init__(
         self,
-        res_dim=3,
         hsqc_dim=3,
         tag_dim=32,
         pos_enc_dim=32,
         embed_dim=128,
         hidden_channels=64,
         out_channels=64,
-        num_layers=8,
-        rho_num_layers=3,
+        num_layers=2,
+        rho_num_layers=2,
+        use_ln=True,
+        dropout=0.0,
     ):
         super().__init__()
 
-        self.res_dim = res_dim
         self.hsqc_dim = hsqc_dim
         self.tag_dim = tag_dim
         self.pos_enc_dim = pos_enc_dim
         self.embed_dim = embed_dim
+        self.use_ln = use_ln
 
         # Setup layers to embed nodes and edges
-        self.embed_res = nn.Linear(
-            res_dim, self.embed_dim - self.tag_dim - self.pos_enc_dim
-        )
         self.embed_hsqc = nn.Linear(
-            self.hsqc_dim, self.embed_dim - self.tag_dim - self.pos_enc_dim
+            hsqc_dim, self.embed_dim - self.tag_dim - self.pos_enc_dim
         )
 
         # Setup tags to identify node and edge types
-        self.res_tag = nn.Parameter(torch.randn(1, self.tag_dim))
-        self.hsqc_tag = nn.Parameter(torch.randn(1, self.tag_dim))
+        self.res_tag = nn.Parameter(torch.zeros(1, self.tag_dim))
+        self.hsqc_tag = nn.Parameter(torch.zeros(1, self.tag_dim))
         self.virtual_tag = nn.Parameter(
             torch.randn(1, self.embed_dim - self.pos_enc_dim)
         )
-        self.res_edge_tag = nn.Parameter(torch.randn(1, self.embed_dim))
-        self.noe_edge_tag = nn.Parameter(torch.randn(1, self.embed_dim))
-        self.virtual_edge_tag = nn.Parameter(torch.randn(1, self.embed_dim))
+        self.res_edge_tag = nn.Parameter(torch.zeros(1, self.embed_dim))
+        self.noe_edge_tag = nn.Parameter(torch.zeros(1, self.embed_dim))
+        self.virtual_edge_tag = nn.Parameter(torch.zeros(1, self.embed_dim))
 
         # Setup signnet + deep sets
         self.embed_posenc = MaskedGINDeepSigns(
@@ -52,8 +52,8 @@ class InitalEmbedLayer(nn.Module):
             num_layers=num_layers,
             dim_pe=pos_enc_dim,
             rho_num_layers=rho_num_layers,
-            use_bn=True,
-            dropout=0.0,
+            use_ln=self.use_ln,
+            dropout=dropout,
             activation="relu",
         )
 
@@ -75,7 +75,7 @@ class InitalEmbedLayer(nn.Module):
         for i, data in enumerate(batch):
             ys.append(data.y)
 
-            res_x = self.embed_res(data.res)
+            res_x = self.embed_hsqc(data.res)
             res_x = torch.cat([res_x, self.res_tag.expand(res_x.size(0), -1)], dim=1)
 
             hsqc_x = self.embed_hsqc(data.hsqc)
@@ -83,15 +83,13 @@ class InitalEmbedLayer(nn.Module):
                 [hsqc_x, self.hsqc_tag.expand(hsqc_x.size(0), -1)], dim=1
             )
 
-            virtual_x = self.virtual_tag.clone()
+            virtual_x = self.virtual_tag
 
-            res_edge_x = self.res_edge_tag.expand(
-                data.contact_edges.size(1), -1
-            ).clone()
-            noe_edge_x = self.noe_edge_tag.expand(data.noe_edges.size(1), -1).clone()
+            res_edge_x = self.res_edge_tag.expand(data.contact_edges.size(1), -1)
+            noe_edge_x = self.noe_edge_tag.expand(data.noe_edges.size(1), -1)
             virtual_edge_x = self.virtual_edge_tag.expand(
                 data.virtual_edges.size(1), -1
-            ).clone()
+            )
 
             node_embeddings.append(res_x)
             node_embeddings.append(hsqc_x)

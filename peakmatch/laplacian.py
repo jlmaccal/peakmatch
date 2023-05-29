@@ -9,16 +9,28 @@ def get_laplacian(
     edge_index, num_nodes, laplace_norm_type=None, eigvec_norm_type="L2", max_freqs=16
 ):
     undir_edge_index = to_undirected(edge_index)
-
     L = to_scipy_sparse_matrix(
         *pyg_get_laplacian(
             undir_edge_index, normalization=laplace_norm_type, num_nodes=num_nodes
         )
     )
-    vals, vecs = np.linalg.eigh(L.toarray())
+
+    # We need to randomly permute the laplacian to avoid leakage of
+    # node ordering information into the eigenvectors. We compute the
+    # eigendecomposition of the permuted laplacian, and then unpermute.
+
+    # Create a permutation vector and permute the Laplacian
+    perm = np.random.permutation(num_nodes)
+    L = L.toarray()[perm, :][:, perm]
+
+    # Perform the eigendecomposition
+    vals, vecs = np.linalg.eigh(L)
     vals, vecs = get_lap_decomp_stats(
         evals=vals, evects=vecs, max_freqs=max_freqs, eigvec_norm=eigvec_norm_type
     )
+
+    # unpermute the eigenvectors
+    vecs = vecs[_invert_permutation(perm), :]
 
     return vecs, vals
 
@@ -101,9 +113,7 @@ def eigvec_normalizer(vecs, vals, normalization="L2", eps=1e-12):
     elif normalization == "wavelength-soft":
         # AbsSoftmax normalization, followed by wavelength multiplication:
         # eigvec / (softmax|eigvec| * sqrt(eigval))
-        denom = (F.softmax(vecs.abs(), dim=0) * vecs.abs()).sum(
-            dim=0, keepdim=True
-        )
+        denom = (F.softmax(vecs.abs(), dim=0) * vecs.abs()).sum(dim=0, keepdim=True)
         eigval_denom = torch.sqrt(vals)
         eigval_denom[vals < eps] = 1  # Problem with eigval = 0
         denom = denom * eigval_denom
@@ -115,3 +125,9 @@ def eigvec_normalizer(vecs, vals, normalization="L2", eps=1e-12):
     vecs = vecs / denom
 
     return vecs
+
+
+def _invert_permutation(perm):
+    inverse = np.zeros_like(perm)
+    inverse[perm] = np.arange(perm.shape[0])
+    return inverse

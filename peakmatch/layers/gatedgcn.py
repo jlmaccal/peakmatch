@@ -12,13 +12,24 @@ class GatedGCNLayer(pyg_nn.conv.MessagePassing):
     https://arxiv.org/pdf/1711.07553.pdf
     """
 
-    def __init__(self, in_dim, out_dim, dropout, residual, activation="relu", **kwargs):
+    def __init__(
+        self,
+        in_dim,
+        out_dim,
+        dropout,
+        residual,
+        activation="relu",
+        use_ln=True,
+        **kwargs
+    ):
         super().__init__(**kwargs)
         self.A = pyg_nn.Linear(in_dim, out_dim, bias=True)
         self.B = pyg_nn.Linear(in_dim, out_dim, bias=True)
         self.C = pyg_nn.Linear(in_dim, out_dim, bias=True)
         self.D = pyg_nn.Linear(in_dim, out_dim, bias=True)
         self.E = pyg_nn.Linear(in_dim, out_dim, bias=True)
+        self.use_ln = use_ln
+
         if activation == "relu":
             self.activation = nn.ReLU
         elif activation == "elu":
@@ -28,13 +39,21 @@ class GatedGCNLayer(pyg_nn.conv.MessagePassing):
         else:
             raise ValueError("Invalid activation")
 
-        self.bn_node_x = nn.BatchNorm1d(out_dim)
-        self.bn_edge_e = nn.BatchNorm1d(out_dim)
+        if self.use_ln:
+            self.ln_node_x = nn.LayerNorm(out_dim)
+            self.ln_edge_e = nn.LayerNorm(out_dim)
         self.act_fn_x = self.activation()
         self.act_fn_e = self.activation()
         self.dropout = dropout
         self.residual = residual
         self.e = None
+
+    def reset_parameters(self):
+        torch.nn.init.kaiming_normal_(self.A.weight, nonlinearity="relu")
+        torch.nn.init.kaiming_normal_(self.B.weight, nonlinearity="relu")
+        torch.nn.init.kaiming_normal_(self.C.weight, nonlinearity="relu")
+        torch.nn.init.kaiming_normal_(self.D.weight, nonlinearity="relu")
+        torch.nn.init.kaiming_normal_(self.E.weight, nonlinearity="relu")
 
     def forward(self, batch):
         x = batch.x  # n_nodes x d
@@ -53,8 +72,9 @@ class GatedGCNLayer(pyg_nn.conv.MessagePassing):
 
         x, e = self.propagate(edge_index, Bx=Bx, Dx=Dx, Ex=Ex, Ce=Ce, e=e, Ax=Ax)
 
-        x = self.bn_node_x(x)
-        e = self.bn_edge_e(e)
+        if self.use_ln:
+            x = self.ln_node_x(x)
+            e = self.ln_edge_e(e)
 
         x = self.act_fn_x(x)
         e = self.act_fn_e(e)
